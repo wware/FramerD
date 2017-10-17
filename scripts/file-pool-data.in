@@ -1,0 +1,16 @@
+#!@prefix@/bin/fdscript
+;;; -*- Mode: fdscript; -*-
+
+;;; $Id: file-pool-data.in,v 1.1 2002/04/05 17:09:58 haase Exp $
+
+(define (main arg1)
+  (let ((pool (use-pool arg1)))
+    (set-notify! #f) (cache-pool pool)
+    (do-pool (frame pool)
+      (print frame) (newline) (print (oid-value frame))
+      (swap-out frame))))
+
+;;; $Log: file-pool-data.in,v $
+;;; Revision 1.1  2002/04/05 17:09:58  haase
+;;; Added compare-file-pools script and support
+;;;

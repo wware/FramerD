@@ -1,0 +1,18 @@
+#!@prefix@/bin/fdscript
+;; -*- Mode: fdscript; -*-
+
+;;; $Id: make-file-pool.in,v 1.3 2002/04/02 21:43:06 haase Exp $
+
+(use-module 'fdmaint)
+
+(define (main filename (size 16000) (super-pool #f))
+  (cond ((and (string? super-pool) (eqv? (elt super-pool 0) #\@))
+	 (make-file-pool filename (parse-arg size) super-pool))
+	(super-pool
+	 (make-file-pool filename (parse-arg size) super-pool))
+	(else (make-file-pool filename (parse-arg size)))))
+
+;;; $Log: make-file-pool.in,v $
+;;; Revision 1.3  2002/04/02 21:43:06  haase
+;;; Added Id and log entries to scripts
+;;;

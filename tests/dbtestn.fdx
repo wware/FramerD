@@ -1,0 +1,10 @@
+(load-component "dbtest.scm")
+(set! test-filename (stringout "dbtestn.scm (" arg3 ")"))
+(define (main)
+  (write-dtype-to-file test-filename (stringout arg3 ".running"))
+  (unless test-pool (dbtest-server-init arg2))
+  (qase arg1
+	("make" (build-db) (do-dbtest) (commit-all))
+	("test" (do-dbtest) (cleanup-memory) (do-dbtest))
+	("cleanup" (cleanup-dbtest-files)))
+  (remove-if-exists (stringout arg3 ".running")))

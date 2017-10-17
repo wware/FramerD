@@ -1,0 +1,26 @@
+* Installing the distribution under WIN32
+
+Go into the FramerD root directory (probably where you found this file) and type:
+  etc\install.bat "\Program Files\FramerD\"
+and then add "\Program Files\FramerD\exe\" to your path or run the programs
+out of there directly.  The script etc/setup.fdx stores the installation path
+in the registry, which means you can use a different target directory but that
+a given user can only have installation.
+
+* Installing a freshly built distribution under Unix
+
+Just type:
+  make install
+or
+  gmake install
+
+Depending on the --prefix provided during configuration (/usr/local is
+the default), executables are put in $prefix/bin, libraries in
+$prefix/lib, and include files in $prefix/include.  The directory
+$prefix/share/framerd is setup to store the installation's
+configuration file and default super pool.  It will have the
+subdirectory $prefix/share/framerd/modules which will start out
+sparsely populated.
+
+* Installing a binary distribution under Unix
+

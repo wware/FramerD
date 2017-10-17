@@ -1,0 +1,90 @@
+(in-safe-module 'mt-utils 'fdinternals)
+
+(define (nrange start end)
+  (if (= start end) start
+      (choice start (nrange (1+ start) end))))
+
+(define (increment-counter ctr)
+  (with-mutex-locked (vector-ref ctr 0)
+    (if (>= (vector-ref ctr 1) (vector-ref ctr 2)) (fail)
+	(let ((result (vector-ref ctr 1)))
+	  (vector-set! ctr 1 (1+ result))
+	  result))))
+
+(define (threadfcn id report-freq proc counter vec)
+  (let ((entry (increment-counter counter)))
+    (while (exists? entry)
+      (apply proc (vector-ref vec entry))
+      (when (and report-freq (zero? (remainder entry report-freq)))
+	(notify "Processed " entry "/" (length vec)
+		"=" (inexact->string (/ (* 100.0 entry) (length vec)) 2) "%: "
+		(vector-ref vec entry)))
+      (set! entry (increment-counter counter)))))
+
+(define (mt-apply n-threads report-freq proc . args)
+  (let* ((vec (choices->vector (apply list args)))
+	 (counter (vector (make-mutex) 0 (length vec)))
+	 (ids (nrange 0 n-threads)))
+    (mpcall threadfcn ids report-freq proc counter vec)))
+
+(define do-choices-mt
+  '(macro (expr)
+     (let* ((control-spec (get-arg expr 1))
+	    (arg (get-arg control-spec 0))
+	    (choice-generator (get-arg control-spec 1))
+	    (n-threads (get-arg control-spec 2 10))
+	    (report-freq (get-arg control-spec 3 #f)))
+       `(mt-apply ,n-threads ,report-freq (lambda (,arg) ,@(cdr (cdr expr)))
+		  ,choice-generator))))
+
+(define (increment-pool-counter pctr)
+  (with-mutex-locked (vector-ref pctr 0)
+    (let ((counter (vector-ref pctr 1))
+	  (limit (vector-ref pctr 2))
+	  (base (vector-ref pctr 3))
+	  (pool (vector-ref pctr 4))
+	  (prefetch-window (vector-ref pctr 5))
+	  (noisy? (vector-ref pctr 6)))
+      (when (zero? (remainder counter prefetch-window))
+	(let ((oids {})
+	      (n-to-fetch
+	       (min prefetch-window (- (pool-load pool) counter))))
+	  (dotimes (i n-to-fetch)
+	    (set+! oids (oid-plus base (+ i counter))))
+	  (when noisy?
+	    (notify "Prefetched " n-to-fetch " oids, starting with "
+		    (oid-plus base counter)))
+	  (prefetch oids)))
+      (when (and (>= counter limit) (< counter (pool-load pool)))
+	(vector-set! pctr 2 (pool-load pool))
+	(set! limit (pool-load pool)))
+      (cond ((>= counter limit) (fail))
+	    (else (vector-set! pctr 1 (1+ counter))
+		  (oid-plus base counter))))))
+
+(define (for-pool-threadfcn id proc counter)
+  (let ((entry (increment-pool-counter counter)))
+    (while (exists? entry)
+      (proc entry)
+      (set! entry (increment-pool-counter counter)))))
+
+(define (mt-for-pool n-threads prefetch-window proc pool noisy?)
+  (let ((counter (vector (make-mutex) 0 (pool-load pool)
+			 (pool-base pool) pool prefetch-window noisy?))
+	(ids (nrange 0 n-threads)))
+    (mpcall for-pool-threadfcn ids proc counter)))
+
+(define do-pool-mt
+  '(macro (expr)
+     (let* ((control-spec (get-arg expr 1))
+	    (arg (get-arg control-spec 0))
+	    (pool-expr (get-arg control-spec 1))
+	    (n-threads (get-arg control-spec 2 10))
+	    (prefetch-window (get-arg control-spec 3 256))
+	    (noisy?  (get-arg control-spec 4 #t)))
+       `(mt-for-pool ,n-threads ,prefetch-window
+		     (lambda (,arg) ,@(cdr (cdr expr)))
+		     ,pool-expr ,noisy?))))
+
+
+(module-export! '{mt-apply mt-for-pool do-choices-mt do-pool-mt})

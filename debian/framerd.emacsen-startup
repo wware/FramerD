@@ -1,0 +1,13 @@
+;; installed in a subdirectory of the respective site-lisp directory.
+;; We have to add this to the load-path:
+(setq load-path (cons (concat "/usr/share/"
+		(symbol-name debian-emacs-flavor)
+		"/site-lisp/fdscript") load-path))
+
+(autoload 'fdscript "fdscript"
+        "Starts an FDScript interpreter process." t)
+(autoload 'fdscript-mode "fdscript"
+        "Sets up a buffer for editing FDScript files." t)
+(setq auto-mode-alist (cons '("\\.fdx$" . fdscript-mode) auto-mode-alist))
+(setq auto-mode-alist (cons '("\\.fdz$" . fdscript-mode) auto-mode-alist))
+(setq auto-mode-alist (cons '("\\.fdcgi$" . fdscript-mode) auto-mode-alist))

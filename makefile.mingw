@@ -1,0 +1,306 @@
+CC	= gcc
+FD_MAJOR= 2
+FD_MINOR= 6
+CFLAGS_OPT=-s -O2
+DATESTAMP=20050115
+CFLAGS	= -Iinclude -fshort-enums -D_REENTRANT \
+	  -DFD_DATESTAMP=$(DATESTAMP) \
+          "-DINSTALL_PREFIX=/Program Files/FramerD/" -DWIN32 \
+          $(CFLAGS_OPT) $(XCFLAGS)
+LIBS    = -lm -lwsock32
+LDFLAGS = -L./lib/ -L./bin/ $(LIBS)
+BUILDROOT = .
+BINDIR	 =  ./bin
+LIBDIR	 =  ./lib
+MAKEBIN	 =  $(CC) $(CFLAGS) $(LDFLAGS) -L$(LIBDIR)
+XFDSCRIPT= LD_LIBRARY_PATH=./lib ./bin/fdscript
+SFDSCRIPT= LD_LIBRARY_PATH=../lib ../bin/fdscript
+FD_VERSION= $(FD_MAJOR).$(FD_MINOR).0`date +%Y%m%d`
+
+CLEAN		= rm -f
+INSTALL		= cp -p
+INSTALLROOT	= "\Program Files\FramerD\"
+
+TAR		= tar
+
+
+# Default rule for generating objects puts them in the source directory
+
+%.o: %.c
+	$(CC) $(CFLAGS) -o $@ -c $<
+
+# Target declarations
+
+# Component declarations
+
+C_SOURCES =  include/*.h include/framerd/*.h \
+	     include/framerd/config.h.in \
+	     src/cons/*.c src/os/*.h src/os/*.c \
+	     src/odb/*.c src/index/*.c \
+	     src/eval/*.c src/scheme/*.c src/scheme/*.h \
+	     src/fdscript/*.c src/text/*.c  src/text/*.h \
+	     src/exe/*.c src/misc/*.c
+SOURCES =    makefile.in version.major version.minor \
+	     tests/*.scm tests/*.sh tests/rfc822.* tests/*.fdz \
+             scripts/*.in $(C_SOURCES) bin/.gdbinit
+DOCS=	     docs/*.html docs/*.png docs/*.css
+ETC=	     etc/install.fdx etc/setup.fdx \
+	     etc/fdscript.el etc/compile-for-elisp.el \
+             etc/install-fdscript.el etc/build-api-doc.fdx \
+             etc/fdstopserver etc/fdresetserver \
+	     etc/fdstartserver.in etc/fdstartall.in etc/init.d.framerd.in \
+	     etc/fdstartall etc/fdstopall \
+	     etc/config.guess etc/config.sub etc/install-sh
+
+DTYPE_HEADERS=	 include/dtypes.h \
+                 include/framerd/dtypes.h \
+                 include/framerd/common.h \
+		 include/framerd/strstream.h \
+		 include/framerd/fdmalloc.h \
+		 include/framerd/except.h \
+		 include/framerd/binio.h \
+		 include/framerd/lisp.h \
+		 include/framerd/cons.h \
+		 include/framerd/oids.h \
+		 include/framerd/os.h \
+		 include/framerd/win32-config.h
+
+FRAMERD_HEADERS= include/fdscript.h \
+		 include/fdeval.h \
+		 include/framerd.h \
+		 include/framerd/fdscript.h \
+		 include/framerd/framerd.h \
+		 include/framerd/dtypes.h \
+		 include/framerd/eval.h \
+		 include/framerd/odb.h \
+		 include/framerd/index.h \
+		 include/framerd/search.h
+
+DTYPE_OBJECTS=src/cons/libdtypes.o \
+	      src/cons/data.o src/cons/xdata.o src/cons/oids.o \
+              src/cons/choices.o src/cons/slotmaps.o \
+	      src/cons/io.o src/cons/hash.o \
+	      src/os/except.o src/os/fdprintf.o src/os/i18n.o \
+	      src/os/fdmalloc.o src/os/network.o \
+	      src/os/envfns.o src/os/timefns.o src/os/filefns.o
+FRAMERD_OBJECTS=src/odb/libframerd.o \
+		src/odb/file-pool.o src/odb/network-pool.o \
+	        src/odb/pools.o src/odb/super-pool.o \
+                src/odb/odb.o src/odb/frames.o \
+		src/index/index.o src/index/portahash.o \
+                src/index/network-index.o src/index/file-index.o \
+                src/index/search.o \
+		src/eval/eval.o src/eval/sandbox.o src/eval/lambda.o \
+		src/eval/ndeval.o src/eval/threads.o src/eval/mini.o \
+		src/eval/load.o src/eval/modules.o src/eval/libfdeval.o 
+FDSCRIPT_OBJECTS=src/scheme/reflect.o src/scheme/special.o \
+		 src/scheme/arith.o src/scheme/bignum.o \
+		 src/scheme/pairs.o src/scheme/cxr.o src/scheme/records.o \
+		 src/scheme/characters.o src/scheme/strings.o \
+		 src/scheme/ioprims.o src/scheme/libfdscheme.o \
+		 src/fdscript/seq.o src/fdscript/prims.o src/fdscript/printout.o \
+		 src/fdscript/osprims.o src/fdscript/hashprims.o \
+		 src/fdscript/framerd.o src/fdscript/maint.o \
+		 src/fdscript/libfdscript.o 
+FDTEXT_OBJECTS=	 src/text/text.o src/text/match.o src/text/md5c.o \
+		 src/text/htmlgen.o src/text/mime.o \
+		 src/text/xml.o src/text/www.o src/text/xmleval.o \
+		 src/text/getnames.o src/text/stem.o 
+MISC_OBJECTS=    src/misc/cgiparse.o src/misc/server.o src/misc/console.o \
+                 src/misc/indextools.o
+
+# Target declarations
+
+DLLS=bin/libdtypes.dll bin/libframerd.dll bin/libfdscript.dll \
+     bin/libfdtext.dll
+
+DTYPE_EXECUTABLES=bin/dtcall.exe
+# Removed these from default build
+#  bin/print-dtype.exe bin/make-dtype.exe
+
+FRAMERD_EXECUTABLES=\
+  bin/analyze-index.exe bin/repack-file-index.exe \
+  bin/repack-file-pool.exe
+# Removed these from default build
+# bin/pool-get.exe bin/index-get.exe
+
+FDSCRIPT_EXECUTABLES=\
+  bin/fdscript.exe bin/fdserver.exe bin/fdcgi.exe bin/fdxml.exe
+# bin/fdservlet.exe
+
+ALL_EXECUTABLES= $(DTYPE_EXECUTABLES) \
+		 $(FRAMERD_EXECUTABLES) \
+		 $(FDSCRIPT_EXECUTABLES)
+
+all:  executables dlls
+executables: $(ALL_EXECUTABLES)
+dlls: $(DLLS)
+
+$(DTYPE_EXECUTABLES): bin/libdtypes.dll 
+$(FRAMERD_EXECUTABLES): bin/libdtypes.dll bin/libframerd.dll 
+$(FDSCRIPT_EXECUTABLES): \
+  bin/libdtypes.dll bin/libframerd.dll bin/libfdscript.dll \
+  bin/libfdtext.dll
+# bin/fdmanager not handled because no fork()
+bin/fdupdate.exe: bin/libdtypes.dll 
+
+# Library targets
+
+bin/libdtypes.dll: $(DTYPE_OBJECTS)
+	dllwrap -o bin/libdtypes.dll \
+                --output-lib lib/libdtypes.a \
+                --output-exp lib/libdtypes.exp \
+                --export-all-symbols \
+                $(DTYPE_OBJECTS) $(LDFLAGS) $(LIBS)
+bin/libframerd.dll: $(FRAMERD_OBJECTS)
+	dllwrap -o bin/libframerd.dll \
+                --output-lib lib/libframerd.a \
+                --output-exp lib/libframerd.exp \
+                --export-all-symbols \
+                $(FRAMERD_OBJECTS) $(LDFLAGS) $(LIBS) -ldtypes
+bin/libfdscript.dll: $(FDSCRIPT_OBJECTS)
+	dllwrap -o bin/libfdscript.dll \
+                   --output-lib lib/libfdscript.a \
+                   --output-exp lib/libfdscript.exp \
+                   --export-all-symbols \
+                   $(FDSCRIPT_OBJECTS) $(LDFLAGS) $(LIBS) -ldtypes -lframerd
+bin/libfdtext.dll: $(FDTEXT_OBJECTS)
+	dllwrap -o bin/libfdtext.dll \
+                   --output-lib lib/libfdtext.a \
+                   --output-exp lib/libfdtext.exp \
+                   --export-all-symbols \
+                   $(FDTEXT_OBJECTS) $(LDFLAGS) $(LIBS) \
+		   -ldtypes -lframerd -lfdscript
+
+# Executable targets
+
+bin/make-dtype.exe: src/exe/make-dtype.c
+	$(MAKEBIN) -o $@ src/exe/make-dtype.c -ldtypes $(LIBS)
+bin/print-dtype.exe: src/exe/print-dtype.c
+	$(MAKEBIN) -o $@ src/exe/print-dtype.c -ldtypes $(LIBS)
+bin/dtcall.exe: src/exe/dtcall.c
+	$(MAKEBIN) -o $@ src/exe/dtcall.c -ldtypes $(LIBS)
+
+bin/pool-get.exe: src/exe/pool-get.c
+	$(MAKEBIN) -o $@ src/exe/pool-get.c -lframerd -ldtypes $(LIBS)
+bin/index-get.exe: src/exe/index-get.c
+	$(MAKEBIN) -o $@ src/exe/index-get.c -lframerd -ldtypes $(LIBS) 
+bin/analyze-index.exe: src/exe/analyze-index.c src/misc/indextools.o 
+	$(MAKEBIN) -o $@ src/exe/analyze-index.c src/misc/indextools.o -lframerd -ldtypes  $(LIBS)
+bin/repack-file-index.exe: src/exe/repack-file-index.c src/misc/indextools.o
+	$(MAKEBIN) -o $@ src/exe/repack-file-index.c src/misc/indextools.o -lframerd -ldtypes $(LIBS)
+bin/repack-file-pool.exe: src/exe/repack-file-pool.c
+	$(MAKEBIN) -o $@ src/exe/repack-file-pool.c -lframerd -ldtypes $(LIBS)
+
+bin/fdscript.exe: src/exe/fdscript.c src/misc/console.o 
+	$(MAKEBIN) -o $@ src/exe/fdscript.c src/misc/console.o \
+		   /usr/lib/libreadline.a \
+	           -lfdtext -lfdscript -lframerd -ldtypes \
+                   $(LIBS)
+bin/fdserver.exe: src/exe/fdserver.c src/misc/server.o
+	$(MAKEBIN) -o $@ src/exe/fdserver.c src/misc/server.o \
+		   -lfdtext -lfdscript -lframerd -ldtypes $(LIBS)
+
+bin/fdupdate.exe: src/exe/fdupdate.c
+	$(MAKEBIN) -o $@ src/exe/fdupdate.c -ldtypes $(LIBS)
+
+bin/fdcgi.exe: src/exe/fdcgi.c src/misc/cgiparse.o
+	$(MAKEBIN) -o $@ src/exe/fdcgi.c src/misc/cgiparse.o \
+		   -lm  -lfdtext -lfdscript -lframerd -ldtypes $(LIBS)
+bin/fdxml.exe: src/exe/fdxml.c src/misc/cgiparse.o
+	$(MAKEBIN) -o $@ src/exe/fdxml.c src/misc/cgiparse.o \
+		   -lm  -lfdtext -lfdscript -lframerd -ldtypes $(LIBS)
+bin/fdservlet.exe: src/exe/fdservlet.c src/misc/cgiparse.o
+	$(MAKEBIN) -o $@ src/exe/fdservlet.c src/misc/cgiparse.o \
+		   -lm -lfdtext -lfdscript -lframerd -ldtypes $(LIBS)
+
+# Maintenance targets
+
+distclean: clean test-clean
+	$(CLEAN) config.cache config.status include/framerd/config.h
+	$(CLEAN) include/framerd/makefile makefile
+	$(CLEAN) etc/fdstartserver etc/fdstartall
+	$(CLEAN) etc/installed-files etc/init.d.framerd
+	$(CLEAN) test.log config.log TAGS
+
+test-clean:
+	cd tests; $(CLEAN) dbtest.pool dbtest.files dbtest.symbols
+	cd tests; $(CLEAN) test.index dbtest.index dbtest.autoindex
+	cd tests; $(CLEAN) tmp1 tmp2 tmp3 u1 u2
+	cd tests; $(CLEAN) fakedb.pool fakedb.index
+	cd tests; $(CLEAN) fdtemp.locks fdtemp.pid
+
+clean: tidy
+	$(CLEAN) $(DTYPE_EXECUTABLES) $(LIBDIR)/libdtypes.a
+	$(CLEAN) $(FRAMERD_EXECUTABLES) $(LIBDIR)/libframerd.a 
+	$(CLEAN) $(FDSCRIPT_EXECUTABLES)
+	$(CLEAN) $(LIBDIR)/libfdscript.a $(LIBDIR)/libfdtext.a
+	$(CLEAN) $(LIBDIR)/*.so* $(LIBDIR)/*.so*
+
+tidy: test-clean
+	$(CLEAN) $(DTYPE_OBJECTS)
+	$(CLEAN) $(FRAMERD_OBJECTS)
+	$(CLEAN) $(FDSCRIPT_OBJECTS)
+	$(CLEAN) $(FDTEXT_OBJECTS)
+	$(CLEAN) $(MISC_OBJECTS)
+	$(CLEAN) core bin/core lib/core tests/core
+	$(CLEAN) src/cons/*~ src/os/*~ src/odb/*~ src/index/*~
+	$(CLEAN) src/eval/*~ src/scheme/*~ src/fdscript/*~ 
+	$(CLEAN) src/misc/*~ src/exe/*~
+	$(CLEAN) *~ etc/*~ docs/*~ scripts/*~
+	$(CLEAN) include/*~ include/framerd/*~ 
+
+# test targets
+
+dbtest: all
+	cd tests; $(SFDSCRIPT) do-dbtest.scm 2>&1 | tee -a ../test.log
+	cd tests; if (test -f dbtest.running) then echo "Problems: DBTEST Aborted"; fi
+
+server-test: all
+	cd tests; LD_LIBRARY_PATH=../lib bash server-test.sh
+
+dbtest-net: all
+	cd tests; LD_LIBRARY_PATH=../lib bash dbtest-net.sh
+
+simple-test: all test-clean
+	cd tests; $(SFDSCRIPT) alltest.scm 2>&1 | tee ../test.log
+
+test: all test-clean
+	make simple-test
+	make dbtest
+	cd tests; $(SFDSCRIPT) fakedb.scm make
+	cd tests; $(SFDSCRIPT) fakedb.scm test
+	make server-test
+
+src/os/i18n.o: src/os/charsets.h src/os/chardata.h
+
+$(DTYPE_OBJECTS): \
+  version.major version.minor $(DTYPE_HEADERS) 
+$(FRAMERD_OBJECTS) $(FDEVAL_OBJECTS) $(FDSCRIPT_OBJECTS) $(FDTEXT_OBJECTS): \
+  version.major version.minor $(DTYPE_HEADERS) $(FRAMERD_HEADERS)
+
+src/text/htmlgen.o: \
+  $(DTYPE_HEADERS) $(FRAMERD_HEADERS) include/framerd/fdwww.h
+
+src/misc/indextools.o src/misc/server.o src/misc/cgiparse.o: \
+  $(DTYPE_HEADERS) $(FRAMERD_HEADERS)
+
+# Dependencies on the stream inclusion kludge
+
+src/cons/io.o: src/cons/txio.c src/cons/dtio.c
+
+# Special rules
+
+src/eval/arith.o: src/eval/arith.c
+	$(CC) $(CFLAGS)  -o $@ -c $<
+
+
+include/buildstamp.h: $(C_HEADERS) $(C_SOURCES)
+	echo Checking buildstamp
+	echo "#define FD_BUILDSTAMP" `date +"%Y%m%d"` > include/buildstamp.h.tmp
+	if test "`cat include/buildstamp.h.tmp`" != "`cat include/buildstamp.h`";\
+	   then echo Updating buildstamp.h; \
+                mv include/buildstamp.h.tmp include/buildstamp.h; \
+           else echo No need to update buildstamp.h; \
+                rm include/buildstamp.h.tmp; fi
+

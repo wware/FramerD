@@ -1,0 +1,72 @@
+framerd (2.6.1-3) unstable; urgency=low
+
+  * new upstream version with many improvements, including:
+    * Numerous bug fixes and expanded error handling
+    * Added new kind of file index which scales better to multi-million
+      key file indices and is based on multiplicative hashing
+    * General improvements to FDSCRIPT module system
+    * Defined more core primitive inference procedures especially around
+      structured (assoc/pair) slots
+    * Added generic facility for file/module reloading
+    * Various frame operation  optimizations
+    * Added new primitives for accessing serial ports (including USB serial ports)
+    * Numerous fixes and additions to arithmetic functions in FDScript
+    * Improvements to index caching performance
+    * Added compound indices which combine multiple indices with a shared cache.
+    * Added subservers on index servers, allowing a server to provide
+      several distinct index tables
+    * Provided C API access to ints and strings in config files
+    * New, simpler command line parsing API
+    * Use long longs as OIDs if possible
+    * Added support for largefiles (> 2GB) for pools and indices
+    * Added synchronization for pools and indices
+    * Use file memory mapping for file pools and indices for dramatically
+      improved performance in many cases;
+    * Further optimiziations to choice/set handling
+    * Added "schema slotmaps" to reduce memory footprint for homogenous databases
+    * Extensions to support extensive malloc debugging
+    * Introduced interned ZSTRINGS as a core data type
+    * Extended the frame data model by adding *adjuncts* which allow
+      index mappings to specify particular slots of for particular pools.
+    * Separated out get-methods and compute-methods
+    * Different pools and indices on the same server now get their own
+      network connection
+    * Added finer grained locks for pool and index access to improve SMP
+      performance.
+    * Optimized index retrieval to return sorted choices
+    * Added tools to manage malformed UTF-8 text (important for DMOZ integration)
+    * Improved ability to preload indices to improve performance
+    * Fixes to HTML/XML integration with special attention to XML
+    * Fix mime parsing with BASE64 encoding
+    * Added tools for parsing structured (tab, space, etc) plaintext
+    * Separated out the FDTEXT and FDWWW libraries
+    * Made FDXML actually be usable and added callout models to have FDXML
+      call Scheme to generate content.
+
+	
+ -- Kenneth Benefiel Haase <kh@beingmeta.com>  Sat, 15 Jan 2005 16:21:51 -0400
+
+framerd (2.4.2-2) unstable; urgency=low
+
+  * new upstream version
+	
+ -- Kenneth Benefiel Haase <kh@beingmeta.com>  Tue, 25 Jun 2002 16:21:51 -0400
+
+framerd (2.4.1-2) unstable; urgency=low
+
+  * added emacs to build depends
+    changed summary description 
+    fixed documentation directory structure
+    closes: bug#155285
+    closes: bug#155581
+    closes: bug#155373
+	
+ -- Kenneth Benefiel Haase <kh@beingmeta.com>  Tue, 25 Jun 2002 16:21:51 -0400
+
+framerd (2.4.1-1) unstable; urgency=low
+
+  * Initial Release.
+    closes: bug#105312
+	
+ -- Kenneth Benefiel Haase <kh@beingmeta.com>  Tue, 25 Jun 2002 16:21:51 -0400
+

@@ -1,0 +1,91 @@
+;;; -*- Mode: fdscript -*-;
+
+;;;; Time query parsing
+
+;; 1996-1998
+;; May-August 1999
+;; 
+
+(in-module 'timespecs 'fdtext)
+
+(define month-data-init
+  '((JAN "january" "janvier")
+    (JAN "february" "fevrier")
+    (MAR "march" "mars")
+    (APR "april" "avril")
+    (MAY "may" "mai")
+    (JUN "june" "juin")
+    (JUL "july" "juli")
+    (AUG "august" "aout")
+    (SEP "september" "sept" "septembre")
+    (OCT "october" "octobre")
+    (NOV "november" "novembre")
+    (DEC "december" "decembre")))
+		      
+(define month-names
+  (let ((table (make-hashtable)))
+    (dolist (entry month-data-init)
+      (let ((names (choice (elts (cdr entry))
+			   (string-downcase (symbol->string (car entry))))))
+	(hashtable-add!
+	 table
+	 (choice names (string-upcase names)(string-capitalize names))
+	 (car entry))))
+    table))
+(define month-abbrevs
+  (let ((table (make-hashset)))
+    (dolist (entry month-data-init)
+      (let ((names (choice (elts (cdr entry))
+			   (string-downcase (symbol->string (car entry))))))
+	(hashset-add!
+	 table
+	 (choice names (string-upcase names)(string-capitalize names)))))
+    table))
+(define ordered-months
+  (list->vector (map car month-data-init)))
+
+(define year-range-pattern
+   #((label from (chunk #((isdigit) (isdigit) (isdigit) (isdigit)))) "-"
+     (label to (chunk #((isdigit) (isdigit) (isdigit) (isdigit))))))
+(define month-range-pattern
+  (vector `(label from (hashset ,month-abbrevs (aword))) "-"
+	  `(label to (hashset ,month-abbrevs (aword)))))
+
+(define date-syms
+  #({} 1st 2nd 3rd 4th 5th 6th 7th 8th 9th 10th 11th 12th 13th 14th 15th
+    16th 17th 18th 19th 20th 21st 22nd 23rd 24th 25th 26th 27th 28th
+    29th 30th 31st {} {} {} {} {} {} {} {} {} {} {} {}))
+
+(define (parse-timequery-element token)
+  (try (textlet year-range-pattern token
+	 (let ((years {})
+	       (start (read-from-string from))
+	       (end (read-from-string to)))
+	   (dotimes (i (1+ (- end start))) (set+! years (+ start i)))
+	   years))
+       (textlet month-range-pattern token
+	 (let ((start-pos (position (hasthable-get month-names from)
+				    ordered-months))
+	       (end-pos (position (hasthable-get month-names to)
+				  ordered-months)))
+	   (if (> end-pos start-pos)
+	       (elts (subseq ordered-months start-pos (1+ end-pos)))
+	       (choice
+		(elts (subseq ordered-months end-pos))
+		(elts (subseq ordered-months 0 (1+ start-pos)))))))
+       (hashtable-get month-names token)
+       (if (tx-match #((isdigit) (isdigit) (isdigit) (isdigit)) token)
+	   (string->number token) (fail))
+       (if (tx-match '{(isdigit) #({"0" "1" "2" "3"} (isdigit))} token)
+	   (position date-syms (string->number token)) (fail))
+       (if (tx-match #((isdigit+) "/" (isdigit+)) token) token (fail))
+       (if (tx-match '(IC {"Summer" "Winter" "Spring" "Autumn"}) token)
+	   (read-from-string token) (fail))))
+
+(define (parse-timespec string)
+  (remove (qc)
+	  (map (lambda (word) (parse-timequery-element word))
+	       (segment string " "))))
+
+(module-export! 'parse-timespec)
+

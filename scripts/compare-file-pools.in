@@ -1,0 +1,66 @@
+#!@prefix@/bin/fdscript
+;;; -*- Mode: fdscript; -*-
+
+;;; $Id: compare-file-pools.in,v 1.1 2002/04/05 17:09:58 haase Exp $
+
+(define (main pool1 pool2)
+  (let ((job1 (start-subjob "@prefix@/bin/fdscript" "--noherald"
+			    "@prefix@/bin/file-pool-data" pool1))
+	(job2 (start-subjob "@prefix@/bin/fdscript" "--noherald"
+			    "@prefix@/bin/file-pool-data" pool2)))
+    (sleep 5)
+    (let ((f1 (read-patiently (subjob-output job1)))
+	  (f2 (read-patiently (subjob-output job2))))
+      (while (and (not (eof-object? f1))  (not (eof-object? f2)))
+	(let ((v1 (read-patiently (subjob-output job1)))
+	      (v2 (read-patiently (subjob-output job2))))
+	  (if (and (bound? v1) (frame? v1) (bound? v2) (frame? v2))
+	      (unless (compare-frames f1 f2 v1 v2)
+		(lineout f1 " and " f2 " are identical"))
+	      (lineout f1 " = " v1 "\n" f2 " = " v2))
+	  (set! f1 (read (subjob-output job1)))
+	  (set! f2 (read (subjob-output job2))))))))
+  
+(define (read-patiently stream)
+  (let ((v (read stream)) (i 0))
+    (while (and (eof-object? v) (< i 5))
+      (sleep 1) (set! v (read stream)) (set! i (1+ i)))
+    v))
+
+(define (compare-frames f1 f2 v1 v2)
+  (let ((differ #f)
+	(name1 (get v1 'obj-name))
+	(name2 (get v2 'obj-name)))
+    (unless (identical? (frame-slots v1) (frame-slots v2))
+      (do-choices (slotid (difference (frame-slots v1) (frame-slots v2)))
+	(lineout "    " f1 name1 " has the extra slot " slotid "with values:")
+	(do-choices (v (get 1v slotid)) (lineout "               " v)))
+      (do-choices (slotid (difference (frame-slots v2) (frame-slots v1)))
+	(lineout "    " f2 name2 " has the extra slot " slotid "with values:")
+	(do-choices (v (get v2 slotid)) (lineout "               "
+					  v)))
+      (set! differ #t))
+    (do-choices (slotid (intersection (frame-slots v1) (frame-slots v2)))
+      (let ((vals1 (get f1 slotid)) (vals2 (get f2 slotid)))
+	(unless (identical? vals1 vals2)
+	  (lineout "    " f1 name1 " differs in the " slotid " slot:")
+	  (printout  "       ")
+	  (do-choices (v (choice vals1 vals2))
+	    (if (contains? v vals1)
+		(unless (contains? v vals2) (printout "+" v))
+		(printout "-" v)))
+	  (newline)
+	  (lineout "    " f2 name2 " differs in the " slotid " slot:")
+	  (printout  "       ")
+	  (do-choices (v (choice vals1 vals2))
+	    (if (contains? v vals2)
+		(unless (contains? v vals1) (printout "+" v))
+		(printout "-" v)))
+	  (newline)
+	  (set! differ #t))))
+    differ))
+
+;;; $Log: compare-file-pools.in,v $
+;;; Revision 1.1  2002/04/05 17:09:58  haase
+;;; Added compare-file-pools script and support
+;;;

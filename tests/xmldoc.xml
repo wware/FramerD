@@ -1,0 +1,10 @@
+<FOO xmlns="urn:foo" xmlns:bar="urn:bar">
+<bar bar:x="33"/>
+<bar:BAZ>
+33
+</bar:BAZ>
+&#35;&#xf6;&eacute;
+<QUUX alpha='bar' >
+&uro;
+</QUUX>
+</FOO>

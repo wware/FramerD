@@ -1,0 +1,259 @@
+span.nobreak { white-space: nowrap;}
+
+table.frame_details th.title { 
+  vertical-align: top; text-align: center; 
+  font-family: sans; font-size: large; }
+table.frame_details th.pseudo_slotid {
+  vertical-align: top; text-align: right; padding: 2pt; font-family: serif;}
+table.frame_details th.slotid {
+  vertical-align: top; text-align: right; padding: 2pt; font-family: sans;}
+table.frame_details td.value {
+  vertical-align: top; text-align: left; padding: 2pt;
+  background-color: lightblue; color: black;
+  font-family: fixed;}
+table.frame_details td.slotvalue {
+  vertical-align: top; text-align: left; padding: 2pt;
+  background-color: lightblue; color: black;
+  font-family: fixed;}
+table.frame_details td.stringvalue {
+  vertical-align: top; text-align: left; padding: 2pt;
+  background-color: lightblue; color: black;
+  font-family: serif; }
+table.frame_details td.slotvalue span.string {
+  white-space: normal;}
+table.frame_details td.oid_addr {
+  vertical-align: top; text-align: left; padding: 2pt;
+  background-color: lightblue; color: black;
+  font-family: fixed; font-weight: bold;}
+table.frame_details td.poolid {
+  vertical-align: top; text-align: left; padding: 2pt;
+  background-color: lightblue; color: black;
+  font-family: serif; font-weight: bold;}
+table.frame_details td.lattice_up {
+  vertical-align: top; text-align: left; padding: 2pt;
+  background-color: lightblue; color: black;
+  font-family: fixed;}
+table.frame_details td.lattice_down {
+  vertical-align: top; text-align: left; padding: 2pt;
+  background-color: lightblue; color: black;
+  font-family: fixed; font-size: smaller;}
+span.lattice_tag { font-size: 18pt; }
+input.conceptcheck { }
+input.tinyconceptcheck { width: 8px; height: 8px; }
+
+span.summary { }
+div.spider {}
+div.spider div.textcue span.inline_prompt { 
+  font-family: sans; font-weight: bold; }
+div.spider div.textcue span.inline_postprompt { 
+  font-family: sans; font-weight: normal; font-style: italic; font-size: 9pt; }
+div.spider div.textcue p.cue_prompt { 
+  font-family: sans; font-weight: bold; 
+  margin-top: 3pt; margin-bottom: 0pt;}
+div.textcue { margin-left: 40px; }
+div.conceptbox { margin-left: 40px; }
+div.controls { float: left; }
+span.concept { margin-left: 0px; }
+div.gloss { 
+  margin-left: 40px;
+  font-style: italic; font-size: small; font-family: serif;}
+div.details { margin-left: 40px; font-size: 8pt; }
+span.uplink { font-size: x-small; }
+span.downlink { font-size: x-small;}
+span.sensecat {
+  font-size: x-small; font-family: fixed; font-variant: small-caps; }
+
+div.pager {
+  padding-top: .5em; padding-bottom: .5em; }
+div.pager_control {
+  text-align: center; vertical-align: top; font-family: sans; }
+div.pager_note {
+  text-align: center; vertical-align: top; font-family: sans; }
+a.pageno {
+  text-decoration: none; padding: 3px; color: blue;}
+span.pageno {
+  text-decoration: none; padding: 3px;}
+a.button {
+  text-decoration: none; font-weight: bold; 
+  padding: 4px; vertical-align: bottom;}
+img.button {
+  text-decoration: none; font-weight: bold;
+  padding: 4px; vertical-align: bottom;}
+
+span.langbox_title { font-size: 9pt; font-family: sans;}
+span.langbox {
+  font-size: 9pt; font-family: sans;}
+span.langbox_rigid {
+  font-size: 9pt; font-family: sans; white-space: nowrap;}
+
+span.wordform {
+  font-family: fixed; font-style: italic;}
+sub.langids {
+  font-size: 8pt; color: red;}
+span.pos {
+  font-family: fixed; float: right; color: green;}
+
+div.conceptsummary { 
+   font-family: sans; line-height: 102%; 
+   margin-bottom: 12pt; margin-left: 8em; margin-right: 8em; }
+div.conceptsummary p { 
+   font-size: 10pt; 
+   line-height: 102%; padding: 0pt; margin: 0pt;}
+div.conceptsummary p.gloss { 
+   font-style: italic; font-size: 10pt;
+   line-height: 102%; padding: 0pt; margin: 0pt; }
+div.conceptsummary p.head { 
+  font-size: 10pt; 
+  line-height: 102%; padding: 0pt; margin: 0pt; }
+
+a.concept { text-decoration: none; white-space: nowrap; }
+a.concept:hover { text-decoration: underline; }
+
+span.unrecognized { 
+  color: red; font-family: sans; font-weight: bold; font-size: small;
+  text-indent: 8em;}
+span.unrecognized span.phrase {
+  color: purple; font-style: italic; }
+span.unique { 
+  color: purple; font-family: sans; font-weight: bold; font-size: small;
+  text-indent: 8em;}
+
+div.cant_edit { color: red; font-family: sans; font-weight: bold; }
+div.slot_explanation {
+  font-family: sans,sans-serif; color: purple; font-weight: bold; font-style: italic;}
+div.novals {
+  font-family: sans,sans-serif; font-style: italic; color: purple;
+  margin-left: 40px;}
+
+a.command_anchor {
+ white-space: nowrap;
+ text-decoration: none; font-size: 10pt; font-family: sans-serif;
+ color: black; background-color: silver; padding: 1pt; margin: 2pt;}
+
+table.pageheader {
+  padding: 2pt; 
+  margin-bottom: 10pt;margin-right: 30pt; }
+table.pageheader th.applogo {
+  padding: 4pt; border: 0pt; margin: 0pt; 
+  padding-bottom: 10pt; padding-top: 5pt;
+  text-align: left; vertical-align: top; line-height: 120%;}
+table.pageheader th.applogo div.sublogo {
+  text-align: left; font-size: 9pt; line-height: 120%;
+  padding-bottom: 10pt;padding-top: 10pt;}
+table.pageheader th.content { 
+  text-align: left; vertical-align: top; font-family: sans-serif;
+  line-height: 130%; padding-bottom: 15pt; padding-top: 5pt;}
+table.pageheader span.bighead {
+  font-size: 12pt;font-family: san-serif;color: gray; }
+table.pageheader span.subhead {
+  font-weight: bold; font-size: 16pt; color: gray; font-family: sans;
+  line-height: 120%; padding-bottom: 10pt; padding-top: 0pt;}
+table.pageheader div.subhead {
+  font-weight: bold; font-size: 16pt; color: gray; font-family: sans;
+  line-height: 120%; padding-top: 0pt;}
+table.pageheader th.content span.instruction {
+  text-align: left; color: gray;
+  font-family: san-serif; font-weight: normal; font-size: 12pt;
+  line-height: 130%; padding-bottom: 15pt;padding-top: 15pt;}
+table.pageheader th.content span.instruction_indented {
+  text-align: left; padding-left: 10pt;  text-indent: 10pt;color: gray;
+  font-family: san-serif; font-weight: normal; font-size: 12pt;
+  line-height: 130%; padding-bottom: 15pt;padding-top: 15pt;}
+table.pageheader th.content span.grayinstructionsmall {
+  font-size: 10pt; font-family: sans-serif; color: gray; font-weight: bold;
+  line-height: 130%; padding-bottom: 10pt; padding-top: 10pt;}
+table.pageheader td.description { 
+   text-align: left; padding-left: 10pt; text-indent: 10pt;
+   padding-right: 10pt; color: gray; 
+   font-family: fixed; font-weight: bold; font-size: 11pt;
+   line-height: 110%; vertical-align: top;}
+table.pageheader th.content span.grayitalicssmall {
+  font-size: 10pt; font-family: sans-serif; color: gray; font-style: italic;
+  line-height: 120%; 
+  padding-bottom: 10pt;padding-top: 10pt;  text-indent: 10pt;}
+table.pageheader th.rightimage {
+  text-align: right; vertical-align: top; padding-right: 0pt;}
+table.pageheader th.rightimage img {
+  border: 0; width: 90px;}
+table.pageheader th.content span.subhead {
+  font-weight: bold; font-size: 16pt; color: gray;font-family: sans;
+  line-height: 120%; padding-bottom: 10pt; padding-top: 0pt;}
+table.pageheader th.content span.sampleurl {
+  color: blue; font-family: fixed; font-weight: normal; font-size: 11pt; 
+  line-height: 130%; 
+  text-decoration: underline; line-height: 120%; padding-bottom: 10pt;
+  padding-top: 10pt;}
+table.pageheader  td.sampleurl2 {  
+  color: blue; font-family: sans-serif; font-weight: bold; font-size: 9pt;
+  line-height: 120%; padding-left: 10pt;padding-bottom: 10pt;padding-top: 2pt;
+  text-indent: 10pt; 
+  text-decoration: underline;}
+
+table.menubar {
+  height: 24px; width: 96%; padding: 2pt;
+  font-family: sans-serif; font-weight: bold; font-size: 10pt;
+  padding: 0pt; border: 0pt; margin: 10pt;
+  border-bottom: solid 3pt purple; 
+  padding-bottom: 0pt; margin-bottom: 2pt;}
+table.menubar tr {
+  padding: 0pt; border: 1pt; margin: 0pt; border-top: solid 3pt purple; }
+table.menubar tr.top {
+  padding: 0pt; border: 0pt; margin: 0pt; border-bottom: solid 3pt purple;}
+table.menubar th {
+  padding: 0pt; border: 0pt; margin: 0pt;}
+table.menubar td {
+  padding: 0pt; border: 0pt; margin: 0pt;}
+
+table.menubar th.applogo {
+  text-align: left; vertical-align: top;
+  padding: 0pt; border: 0pt; margin: 0pt;}
+table.menubar th.applogo div.pagelogo {
+  text-align: left;
+  color: purple; font-size: 14pt; font-family: inherit;}
+table.menubar tr.top th.pagelogo {
+  text-align: center; font-weight: bold;
+  color: purple; font-size: 18pt; font-family: inherit;}
+table.menubar tr th.pagelogo {
+  text-align: left; font-weight: bold;
+  color: purple; font-size: 14pt; font-family: inherit;}
+
+table.menubar th.sitelogo {
+  text-align: right; vertical-align: top;
+  padding: 0pt; border: 0pt; margin: 0pt;}
+
+table.menubar td.buttons {
+  font-family: sans-serif; font-weight: normal; text-align: center;
+  padding: 0pt; border: 0pt; margin: 0pt;
+  line-height: 100%; vertical-align: top;}
+
+div.concept div.gloss {
+  font-size: 12pt; font-weight: normal;
+  margin-left: 0em;}
+div.concept div.words {
+  margin-left: 10mm; margin-right: 25mm; padding-top: 5pt;
+  font-size: 150%;
+  background-color: rgb(238,238,0);}
+div.concept div.genls {
+  margin-left: 25mm; text-align: left; margin-right: 25mm; 
+  padding-left: 15mm; text-indent: -15mm;
+  background-color: rgb(238,238,0);}
+
+div.timebar {
+ font-family: fixed; font-weight: bold;
+ width: 100%; clear: both; text-align:center;}
+span.timeblip {
+ font-family: fixed; font-weight: bold; font-size: 80%;
+ border: solid red 1pt;}
+
+div.expertcheck {
+ font-family: sans-serif; font-size: 8pt; font-weight: normal;
+ padding-top: 0pt; margin-top: 0pt; border-top: 0pt; white-space: nowrap;
+ cursor: pointer;}
+input.expertcheck {}
+
+div.helpcheck {
+ font-family: sans-serif; font-size: 8pt; font-weight: normal;
+ padding-top: 0pt; margin-top: 0pt; border-top: 0pt; white-space: nowrap;
+ cursor: pointer;}
+input.helpcheck {}
+

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>IFPkgDescriptionDeleteWarning</key>
+	<string></string>
+	<key>IFPkgDescriptionDescription</key>
+	<string>FramerD is a portable distributed object-oriented database designed to support the maintenance and sharing of knowledge bases. Unlike other object-oriented databases, FramerD is optimized for the sort of pointer-intensive data structures used by semantic networks, frame systems, and many intelligent agent applications. FramerD databases readily include millions of searchable frames and may be distributed over multiple networked machines. FramerD includes an extensive scripting language based on Scheme with special support for web-based interfaces.</string>
+	<key>IFPkgDescriptionTitle</key>
+	<string>FramerD</string>
+	<key>IFPkgDescriptionVersion</key>
+	<string>2.6.1</string>
+</dict>
+</plist>

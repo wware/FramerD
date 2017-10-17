@@ -1,0 +1,130 @@
+;;; -*- Mode: fdscript; -*-
+
+;;; This is the module file for using the brico knowledge base.  It
+;;; includes variables bound to the main derived slot types and
+;;; defines the methods used by those slots.
+;;; Copyright (C) beingmeta, inc. 2001-2002
+;;;   $Id: boot-brico.fdx,v 1.3 2003/10/23 17:15:51 haase Exp $
+
+(in-module 'brico #t)
+(use-module 'fdtext)
+(use-module 'fdinternals)
+
+(load-component "brico-methods.fdx")
+
+(define brico-index (use-index 'brico))
+(define brico-pool  (use-pool 'brico))
+(define brico-pools
+  (filter-choices (pool (all-pools))
+    (equal? (pool-id pool) (pool-id brico-pool))))
+
+(define wordnet-source @/brico/0)
+(define roget-source @/brico/1)
+(define cyc-source @/brico/2)
+(define cyc-comment (?? 'cyc-name 'comment))
+
+(defframe all-words 'brico 'brico
+  'get-methods 'brico:get-all-words)
+(defframe atomic-words 'brico 'brico
+  'get-methods 'brico:get-atomic-words)
+
+;;; The BRICO general slotids
+
+(defframe genls 'brico 'brico
+  'get-methods 'brico:get-genls 'test-methods 'brico:test-genls
+  'add-effects 'brico:inv-add!  'drop-effects 'brico:inv-drop!)
+(defframe specls 'brico 'brico
+  'get-methods 'brico:get-specls 'test-methods 'brico:test-specls
+  'add-effects 'brico:inv-add!   'drop-effects 'brico:inv-drop!)
+
+(defframe part-of 'brico 'brico
+  'get-methods 'brico:get-part-of 'test-methods 'brico:test-part-of
+  'add-effects 'brico:inv-add!    'drop-effects 'brico:inv-drop!)
+(defframe parts 'brico 'brico
+  'get-methods 'brico:get-parts 'test-methods 'brico:test-parts
+  'add-effects 'brico:inv-add!  'drop-effects 'brico:inv-drop!)
+(defframe ingredients 'brico 'brico
+  'get-methods 'brico:get-ingredients 'test-methods 'brico:test-ingredients
+  'add-effects 'brico:inv-add!        'drop-effects 'brico:inv-drop!)
+(defframe ingredient-of 'brico 'brico
+  'get-methods 'brico:get-ingredient-of 'test-methods 'brico:test-ingredient-of
+  'add-effects 'brico:inv-add!          'drop-effects 'brico:inv-drop!)
+(defframe members 'brico 'brico
+  'get-methods 'brico:get-members 'test-methods 'brico:test-members
+  'add-effects 'brico:inv-add!    'drop-effects 'brico:inv-drop!)
+(defframe member-of 'brico 'brico
+  'get-methods 'brico:get-member-of 'test-methods 'brico:test-member-of
+  'add-effects 'brico:inv-add!      'drop-effects 'brico:inv-drop!)
+
+(defframe inverse 'brico 'brico)
+
+(defframe genls* 'brico 'brico
+  'get-methods 'fd:kleene-get 'closure-of genls)
+(defframe part-of* 'brico 'brico
+  'get-methods 'fd:kleene-get 'closure-of part-of)
+(defframe member-of* 'brico 'brico
+  'get-methods 'fd:kleene-get 'closure-of member-of)
+(defframe ingredient-of* 'brico 'brico
+  'get-methods 'fd:kleene-get 'closure-of ingredient-of)
+
+(defframe specls* 'brico 'brico
+  'get-methods 'fd:kleene-get 'closure-of specls)
+(defframe parts* 'brico 'brico
+  'get-methods 'fd:kleene-get 'closure-of parts)
+(defframe members* 'brico 'brico
+  'get-methods 'fd:kleene-get 'closure-of members)
+(defframe ingredients* 'brico 'brico
+  'get-methods 'fd:kleene-get 'closure-of ingredients)
+
+
+(defframe disjoint 'brico 'brico)
+
+(defframe isa 'brico 'brico)
+(defframe instances 'brico 'brico)
+(defframe allisa 'brico 'brico)
+
+(defframe =is= 'brico 'brico
+  'get-methods 'brico:get=is=
+  'test-methods 'brico:test=is=)
+
+(defframe given-name 'brico 'brico)
+(defframe family-name 'brico 'brico)
+(defframe middle-names 'brico 'brico)
+
+(defframe adjmods brico-pool brico-index)
+(defframe nounmods brico-pool brico-index)
+
+(defframe trigrams brico-pool brico-index
+  'get-methods 'brico:trigrams-get)
+(defframe bigrams brico-pool brico-index
+  'get-methods 'brico:bigrams-get)
+
+;;; Maintaining caches of slot refs
+
+(define english (?? 'langid 'en))
+
+(module-export!
+ '{reset-brico!
+   brico-pool brico-index brico-pools
+   wordnet-source roget-source cyc-source
+   english bigrams trigrams})
+
+;(reset-brico!)
+
+;;; CVS changelog for file
+;;; $Log: boot-brico.fdx,v $
+;;; Revision 1.3  2003/10/23 17:15:51  haase
+;;; Fixes to brico
+;;;
+;;; Revision 1.2  2002/07/16 15:25:22  haase
+;;; Added bigrams and trigrams
+;;;
+;;; Revision 1.1  2002/06/25 16:59:26  haase
+;;; Added new BRICO module which can be loaded without pool/index access
+;;;
+;;; Revision 1.18  2002/06/15 20:42:30  haase
+;;; Made IN-MODULE default to the same level of security as the current context
+;;;
+;;; Revision 1.17  2002/04/21 13:02:27  haase
+;;; Export given/family/middle name slots
+;;;

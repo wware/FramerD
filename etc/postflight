@@ -1,0 +1,2 @@
+#!/bin/sh
+/usr/bin/fdscript /usr/share/framerd/etc/setup.fdx /usr/share/framerd

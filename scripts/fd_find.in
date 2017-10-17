@@ -1,0 +1,16 @@
+#!@prefix@/bin/fdscript
+;; -*- Mode: fdscript; -*-
+
+(use-module 'fdshell)
+
+(define (main)
+  (control-frame-printing 2)
+  (let ((parsed-args '()))
+    (do ((a (cdr args) (cddr a)))
+	((null? a)
+	 (let ((findings
+		(apply find-frames %background (reverse parsed-args))))
+	   (lineout ";;; There are " (choice-size findings) " matches")
+	   (do-choices (finding findings) (lineout "  " finding))))
+      (set! parsed-args (cons (fdsh-arg (car a) #t) parsed-args))
+      (set! parsed-args (cons (fdsh-arg (cadr a)) parsed-args)))))

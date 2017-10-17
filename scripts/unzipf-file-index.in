@@ -1,0 +1,21 @@
+#!@prefix@/bin/fdscript
+;; -*- Mode: fdscript; -*-
+
+;;; $Id: unzipf-file-index.in,v 1.2 2002/04/02 21:43:06 haase Exp $
+
+(use-module 'fdmaint)
+(use-module 'fdshell)
+
+(define (main)
+  (cond ((= nargs 5)
+	 (unzipf-idx-file arg1 arg2 (parse-arg arg3) (parse-arg arg4))
+	((= nargs 4)
+	 (unzipf-idx-file arg1 arg2 (parse-arg arg3)))
+	(else
+	 (lineout "Usage: unzipf-idx-file <idx file> <new file> <min> [max]")))))
+
+
+;;; $Log: unzipf-file-index.in,v $
+;;; Revision 1.2  2002/04/02 21:43:06  haase
+;;; Added Id and log entries to scripts
+;;;

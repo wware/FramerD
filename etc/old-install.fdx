@@ -1,0 +1,295 @@
+(define target #f)
+(define os (get-osid))
+(define major-version
+  (read-from-string (filestring "version.major")))
+(define minor-version
+  (read-from-string (filestring "version.minor")))
+(define win32p (search "win32" os))
+(unless (bound? framerd-group)
+  (set! framerd-group (and (get-gid "framerd") "framerd")))
+(define installed-files '())
+(eval '(control-frame-printing 0) fdinternals)
+
+(define (set-permissions! file)
+  (unless win32p
+    ;; Let anybody read and execute this, overriding umasks
+    (system "chmod a+rX " file)
+    (when framerd-group
+      ;; Let the group have write access and execute access
+      ;; if appropriate
+      (system "chmod g+rwX " file)
+      (system "chgrp " framerd-group " " file))))
+
+(define (copy-binary-files extension source target)
+  (let ((prefix-length (length source))
+	(files (if (directory? source) (getfiles source) (fail))))
+    (do-choices (file files)
+      (unless (eqv? (elt (basename file) 0) #\.)
+	(when (or (equal? extension "") (search extension file))
+	  (unless (file-writable?
+		   (stringout target (subseq file prefix-length)))
+	    (lineout ">>>>   !! Clearing away target file "
+	      (stringout target (subseq file prefix-length)))
+	    (remove-file (stringout target (subseq file prefix-length))))
+	  (lineout ">>>>        Installing "
+	    (stringout target (subseq file prefix-length)))
+	  (copy-binary-file
+	   file (stringout target (subseq file prefix-length)))
+	  (set-permissions! (stringout target (subseq file prefix-length)))
+	  (set! installed-files
+		(cons (stringout target (subseq file prefix-length))
+		      installed-files)))))))
+(define (copy-text-files extension source target)
+  (let ((prefix-length (length source))
+	(files (if (directory? source) (getfiles source) (fail))))
+    (do-choices (file files)
+      (unless (eqv? (elt (basename file) 0) #\.)
+	(when (search extension file)
+	  (lineout ">>>>        Installing "
+	    (stringout target (subseq file prefix-length)))
+	  (copy-text-file
+	   file (stringout target (subseq file prefix-length)))
+	  (set-permissions! (stringout target (subseq file prefix-length)))
+	  (set! installed-files
+		(cons (stringout target (subseq file prefix-length))
+		      installed-files)))))))
+(define (mkdir-if-needed dirspec)
+  (let ((dir (fullname dirspec)))
+    (unless (file-exists? dir)
+      (lineout ">>> Making directory " dir)
+      (mkdir dir)
+      ;; Root may make directories with weird permissions
+      (set-permissions! dir))
+    (set! installed-files
+	  (cons (list 'directory dir) installed-files))))
+
+(define (install-library file from to)
+  (copy-binary-file
+   (stringout from "/" file)
+   (stringout to "/" file "." major-version "." minor-version))
+  (set! installed-files
+	(cons (stringout to "/" file "." major-version "." minor-version)
+	      installed-files))
+  (lineout ">>>>        Installing "
+    to file "." major-version "." minor-version)
+  (when (file-exists? (stringout to "/" file "." major-version))
+    (remove-file (stringout to "/" file "." major-version)))
+  (system "ln -s "
+	  to file "." major-version "." minor-version " "
+	  to file "." major-version)
+  (set! installed-files
+	(cons (stringout to file "." major-version)
+	      installed-files))
+  (when (file-exists? (stringout to file))
+    (remove-file (stringout to file)))
+  (system "ln -s " to file "." major-version " " to file)
+  (set! installed-files
+	(cons (stringout to file) installed-files))
+  (when (and (has-suffix file ".so")
+	     (not (has-prefix file "lib")))
+    (sytem "ln -s "
+	   to "/" file "." major-version "." minor-version
+	   " " to "/lib" file)))
+
+(if (and (>= nargs 1) (> (length (string-trim arg1)) 0))
+  (set! target (string-trim arg1))
+  (cond (win32p
+	 (set! target
+	       (cond ((directory? "\\Program Files")
+		      "\\Program Files\\FramerD")
+		     ((directory? "C:\\Program Files")
+		      "C:\\Program Files\\FramerD")
+		     ((directory? "D:\\Program Files")
+		      "D:\\Program Files\\FramerD")
+		     ((directory? "E:\\Program Files")
+		      "E:\\Program Files\\FramerD")
+		     (else "\\Program Files\\FramerD")))
+	 (mkdir-if-needed target))
+	(else (set! target "/usr/local/"))))
+
+(lineout ">>> Installing FramerD " major-version "." minor-version
+	 " for " os " under " target)
+(mkdir-if-needed target)
+
+(lineout ">>> Installing binaries")
+(cond (win32p
+       (mkdir-if-needed (stringout target "\\bin"))
+       (copy-binary-files ".dll" "./bin" (stringout target "\\bin"))
+       (copy-binary-files ".exe" "./bin" (stringout target "\\bin"))
+       (mkdir-if-needed (stringout target "\\lib"))
+       (copy-binary-files ".lib" "./lib" (stringout target "\\lib"))
+       (copy-binary-files ".exp" "./lib" (stringout target "\\lib"))
+       (mkdir-if-needed (stringout target "\\scripts"))
+       (set! framerd-lib target))
+      (else
+       (mkdir-if-needed (stringout target "/bin"))
+       (copy-binary-files "" "./bin" (stringout target "/bin"))
+       (lineout ">>>  Installing shared libraries")
+       (mkdir-if-needed (stringout target "/lib"))
+       ;; If what you just built doesn't provide a dynamic kernel, 
+       ;;  remove any dynamic kernel libraries which exist.
+       (when (and (not (file-exists? "./lib/libdtypes.so"))
+		  (file-exists? (stringout target "/lib/libdtypes.so")))
+	 (system "rm -f " target "/lib/libdtypes.so*"))
+       (when (and (not (file-exists? "./lib/libframerd.so"))
+		  (file-exists? (stringout target "/lib/libframerd.so")))
+	 (system "rm -f " target "/lib/libframerd.so*"))       
+       (when (and (not (file-exists? "./lib/libfdscript.so"))
+		  (file-exists? (stringout target "/lib/libfdscript.so")))
+	 (system "rm -f " target "/lib/libfdscript.so*"))
+       (let ((some-so #f))
+	 (do-choices (file (getfiles "./lib"))
+           (when (has-suffix ".so" file)
+             (set! some-so #t)
+	     (let* ((prefix "./lib/")
+		    (root (subseq file (length prefix))))
+	       (install-library root prefix (stringout target "/lib/")))))
+	 (when (and some-so (file-exists? "/sbin/ldconfig"))
+	    (system "/sbin/ldconfig " (stringout target "/lib/"))))
+       (lineout ">>>  Installing static libraries")
+       (mkdir-if-needed (stringout target "/lib"))
+       (copy-binary-files ".a" "./lib" (stringout target "/lib"))
+       (lineout ">>> Setting up shared data")
+       (mkdir-if-needed (stringout target "/share"))
+       (mkdir-if-needed (stringout target "/share/framerd"))
+       (set! framerd-lib (stringout target "/share/framerd"))))
+
+;;; Install the scripts
+(lineout ">>> Installing FDScript scripts")
+(let ((bin-target (stringout target "/bin/"))
+      (interpreter
+       (if win32p (fullname (stringout target "\\bin\\fdscript.exe"))
+	   (fullname (stringout target "/bin/fdscript"))))
+      (prefix (length "./scripts/"))
+      (suffix (length ".fdx")))
+  (do-choices (file (getfiles "./scripts/"))
+    (when (has-suffix ".fdx" file)
+      (let* ((len (length file))
+	     (core-name (subseq file prefix (- len suffix))))
+	(cond (win32p
+	       (let ((copied-script
+		      (stringout target "\\scripts\\" (subseq file prefix)))
+		     (port (open-output-file
+			    (stringout bin-target core-name ".BAT"))))
+		 (lineout ">>>>        Constructing "
+		   bin-target core-name ".BAT")
+		 (copy-text-file file copied-script)
+		 (let* ((script-name (stringout bin-target core-name ".BAT"))
+			(port (open-output-file script-name)))
+		   (set! installed-files (cons script-name installed-files))
+		   (printout-to port interpreter " "
+				(fullname copied-script) " %*\n"))))
+	      (else
+	       (lineout ">>>>        Constructing " bin-target core-name)
+	       (let* ((script-name (stringout bin-target core-name))
+		      (port (open-output-file script-name)))
+		 (set! installed-files (cons script-name installed-files))
+		 (printout-to port
+		   "#!" (fullname (stringout target "/bin/fdscript"))
+		   "\n" (filestring file) "\n"))
+	       (system "chmod a+x " (stringout bin-target core-name))))))))
+
+;;; Installing include files
+(mkdir-if-needed (fullname (stringout target "/include")))
+(lineout ">>> Installing include files in "
+  (fullname (stringout target "/include")))
+(mkdir-if-needed (fullname (stringout target "/include/framerd")))
+(copy-text-files ".h" "./include/framerd"
+		 (fullname (stringout target "/include/framerd")))
+(unless win32p
+  (let ((include-dir (stringout target "/include/framerd/")))
+    (copy-text-file "./include/framerd/makefile"
+		    (fullname (stringout include-dir "makefile")))
+    (set! installed-files
+	  (append (list (fullname (stringout include-dir "makefile"))) 
+		  installed-files))))
+
+(lineout ">>> Installing documentation in "
+  (fullname (stringout framerd-lib "/docs")))
+(mkdir-if-needed (fullname (stringout framerd-lib "/docs")))
+(copy-text-files ".html" "./docs" (fullname (stringout framerd-lib "/docs")))
+(copy-text-files ".css" "./docs" (fullname (stringout framerd-lib "/docs")))
+(copy-binary-files ".gif" "./docs" (fullname (stringout framerd-lib "/docs")))
+(copy-binary-files ".jpg" "./docs" (fullname (stringout framerd-lib "/docs")))
+
+(lineout ">>> Installing documentation in "
+  (fullname (stringout framerd-lib "/docs")))
+(mkdir-if-needed (fullname (stringout framerd-lib "/modules")))
+
+(unless win32p
+  (cond ((file-exists? (stringout target "/share/emacs/site-lisp/"))
+         (copy-text-files ".el" "./etc"
+			  (stringout target "/share/emacs/site-lisp")))
+	(else
+	 (lineout ">>> Trying to use Emacs to  install elisp files....")
+	 (system "emacs -batch --no-init-file -l etc/install-fdscript.el"))))
+(when win32p
+  (lineout ">>> Copying elisp files to " framerd-lib)
+  (copy-text-files ".el" "./etc" framerd-lib)
+  (copy-binary-files ".elc" "./etc" framerd-lib))
+
+(define (read-file-lines file)
+  (let ((stream (open-input-file file)))
+    (do ((lines '())
+	 (line (readline stream) (readline stream)))
+	((eof-object? line) (reverse lines))
+      (set! lines (cons line lines)))))
+
+(lineout ">>> Copying server utility functions and init")
+(define bindir (stringout target "/sbin/"))
+(define (install-server-script filename)
+  (let ((target-file (stringout target "/sbin/" filename)))
+    (copy-text-file (stringout "./etc/" filename) target-file)
+    (system "chmod a+rx " target-file)
+    (system "chmod g+rwx " target-file)))
+
+(unless win32p
+  (install-server-script "fdstartserver")
+  (install-server-script "fdstopserver")
+  (install-server-script "fdresetserver"))
+;; Now install the fdservers master script
+(define init-loc
+  (cond ((directory? "/etc/rc.d/init.d") "/etc/rc.d/init.d/fdservers")
+	((directory? "/etc/init.d") "/etc/init.d/fdservers")
+	((directory? "/etc/rc.d") "/etc/rc.d/fdservers")
+	(else "/etc/rc.fdservers")))
+(unless (or win32p (not (file-writable? init-loc)))
+  (lineout ">>> Installed fdserver startup script in " init-loc)
+  (copy-text-file "./etc/fdservers" init-loc)
+  (system "chmod a+r-wx " init-loc)
+  (system "chmod u+wx " init-loc)
+  (system "chown root " init-loc)
+  (system "chgrp root " init-loc)
+  (cond ((file-exists? "/usr/sbin/chkconfig")
+	 (system "/usr/sbin/chkconfig --add framerd"))
+	((file-exists? "/sbin/chkconfig")
+	 (system "/sbin/chkconfig --add framerd"))))
+
+;;; Install the uninstall
+(lineout ">>> Installing the uninstall-script")
+(unless win32p
+  (let ((output (open-output-file (stringout bindir "/uninstall-framerd"))))
+    (printout-to output "#!/bin/sh" "\n")
+    (dolist (file installed-files)
+      (when (string? file) (printout-to output "rm -f " file "\n")))
+    (dolist (file installed-files)
+      (when (and (pair? file) (eq? (car file) 'directory))
+	(unless (pair? (cdr file))
+	  (lineout "Very weird installed files list")
+	  (exit))
+	(printout-to output "rmdir  " (cadr file) "\n"))))
+  (system "chmod +x " bindir "/uninstall-framerd"))
+(when win32p
+  (let ((output (open-output-file
+		 (stringout bindir "/uninstall-framerd.bat"))))
+    (dolist (file installed-files)
+      (cond ((string? file)
+	     (printout-to output "DELETE \"" file "\"\n"))
+	    ((and (pair? file) (eq? (car file) 'directory)
+		  (pair? (cdr file)))
+	     (printout-to output "rmdir  \"" (cadr file) "\"\n"))
+	    (else (lineout "Very weird installed files list")
+		  (exit))))))
+
+(load-component "setup.fdx")
+

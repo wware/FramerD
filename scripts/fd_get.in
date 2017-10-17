@@ -1,0 +1,20 @@
+#!@prefix@/bin/fdscript
+;; -*- Mode: fdscript; -*-
+
+;;; $Id: fd_get.in,v 1.2 2002/04/02 21:43:06 haase Exp $
+
+(use-module 'fdshell)
+(use-module 'fdinternals)
+(define (main)
+  (control-frame-printing 2)
+  (let ((results (get (fdsh-arg arg1) (fdsh-arg arg2 #t))))
+    (lineout ";; There are " (choice-size results) " results")
+    (do-choices (result results) (printout "  ") (write result) (newline))
+    (when (> (choice-size results) 5)
+      (lineout ";; There were " (choice-size results) " results"))))
+
+
+;;; $Log: fd_get.in,v $
+;;; Revision 1.2  2002/04/02 21:43:06  haase
+;;; Added Id and log entries to scripts
+;;;

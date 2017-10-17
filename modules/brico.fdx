@@ -1,0 +1,225 @@
+;;; -*- Mode: fdscript; -*-
+
+;;; This is the module file for using the brico knowledge base.  It
+;;; includes variables bound to the main derived slot types and
+;;; defines the methods used by those slots.
+;;; Copyright (C) beingmeta, inc. 2001-2002
+;;;   $Id: brico.fdx,v 1.35 2004/09/28 23:40:50 haase Exp $
+
+(in-module 'brico '{fdtext fdinternals index-plus})
+
+(define brico-pool (name->pool "brico.framerd.org"))
+(define brico-pools brico-pool)
+(define brico-index (get-index brico-pool))
+;(define brico-pools (choice brico-pool cyc-pool))
+;(define cyc-pool (name->pool "cyc.brico.framerd.org"))
+;(define cyc-index (get-index cyc-pool))
+
+(when (exists? brico-pool)
+  (when (fail? brico-index)
+    (do-choices (index (all-indices))
+      (if (exists? (index-get index '(obj-name . brico-source)))
+	  (set! brico-index index)))))
+;(when (exists? cyc-pool)
+;  (when (fail? cyc-index)
+;    (do-choices (index (all-indices))
+;      (if (exists? (index-get index '(OBJ-NAME . "CycSystemVariable")))
+;	  (set! cyc-index index)))))
+
+(define (use-brico (source #f))
+  (if source (gset! brico source))
+  (when (fail? brico-pool)
+    (set! brico-pools (use-pool++ 'brico)))
+;  (when (fail? cyc-pool)
+;    (if (bound? cyc) (use-pool++ 'cyc)))
+  (when (fail? brico-pool)
+    (set! brico-pool (use-pool "brico.framerd.org")))
+;  (when (fail? cyc-pool)
+;    (set! cyc-pool (use-pool "cyc.brico.framerd.org")))
+  (when (fail? brico-index)
+    (set! brico-index (use-index brico)))
+;  (when (fail? cyc-index)
+;    (if (bound? cyc) (set! cyc-index (use-index cyc)))
+;    (if (fail? cyc-index) (set! cyc-index brico-index)))
+  (reset-brico!))
+
+(define wordnet-source @1/0)
+(define roget-source @1/1)
+(define cyc-source @1/2)
+(define cyc-comment @1/200552)
+
+(module-export!
+ '{use-brico
+   brico-pools brico-pool cyc-pool brico-index cyc-index
+   wordnet-source roget-source cyc-source
+   cyc-comment})
+
+(define all-words @1/2d9df)
+(define atomic-words @1/2d9e0)
+
+;;; The BRICO general slotids
+
+(define genls @1/2c272)
+(define specls @1/2c273)
+
+(define part-of @1/2c274)
+(define parts @1/2c275)
+(define ingredients @1/2c276)
+(define ingredient-of @1/2c277)
+(define members @1/2c278)
+(define member-of @1/2c279)
+
+(define inverse @1/2c27a)
+(define disjoint @1/2c27d)
+(define isa @1/2c27e)
+(define instances @1/2c27f)
+(define allisa @1/2c280)
+
+(define genls* @1/2c27b)
+(define specls* @1/2c27c)
+(define part-of* @1/2c281)
+(define parts* @1/2c282) ; no parts
+(define member-of* @1/2c283)
+(define members* @1/2c284)
+(define ingredient-of* @1/2c285)
+(define ingredients* @1/2c286)
+
+(define =is= @1/2d9e9)
+
+(define given-name @1/434ca)
+(define family-name @1/434cb)
+(define middle-names @1/434cc)
+
+(define adjmods @1/44677)
+(define nounmods @1/44678)
+
+(define english @1/2c1c7)
+
+(define trigrams @1/44679)
+(define bigrams @1/4467a)
+
+(module-export!
+ '{genls specls genls* specls* inverse disjoint
+   isa instances allisa
+   parts part-of members member-of ingredients ingredient-of
+   part-of* parts* member-of* members* ingredient-of* ingredients*
+   all-words atomic-words =is=
+   given-name family-name middle-names
+   adjmods nounmods
+   english bigrams trigrams
+   })
+
+;;; Strings to concepts
+
+;;;; Concept parsing
+
+(define morphfn #f)
+(define (set-morphfn! fcn) (set! morphfn fcn))
+
+(define paren-ref #((label text (char-not "(")) "(" (label class (char-not ")")) ")" (spaces)))
+(define colonized-ref #((label text (char-not ":")) ":" (label class (rest))))
+
+(define class-slotids (choice genls* part-of* member-of* ingredients* isa))
+
+(define (string->concepts string (language #f))
+  (unless language (set! language english))
+  (if (or (find #\: string) (tx-match paren-ref string))
+      (textlet (choice paren-ref colonized-ref) string
+	(pick (string->concepts (string-trim text) language)
+	  class-slotids
+	  (string->concepts (string-trim class)  language)))
+    (if (find #\, string)
+	(let* ((commapos (position #\, string))
+	       (first-part (string-trim (subseq string 0 commapos)))
+	       (second-part (string-trim (subseq string (1+ commapos)))))
+	  (pick (string->concepts first-part language) part-of*
+		(string->concepts second-part language)))
+      (choice
+       (if (capitalized? string) (?? 'names (stdstring string)) (fail))
+       (try (if morphfn
+		(let ((string (stdspace string)))
+		  (choice (?? language string)
+			  (?? language (morphfn string 'noun language)
+			      'part-of-speech 'noun)
+			  (?? language (morphfn string 'verb language)
+			      'part-of-speech 'verb)))
+	      (?? language (stdspace string))))))))
+(module-export! '{set-morphfn! string->concepts morphfn})
+
+;;; Load methods
+
+(load-component "brico-methods.fdx")
+
+;(reset-brico!)
+
+;;; CVS changelog for file
+;;; $Log: brico.fdx,v $
+;;; Revision 1.35  2004/09/28 23:40:50  haase
+;;; Comment changes
+;;;
+;;; Revision 1.34  2004/08/01 01:36:34  haase
+;;; Added SINGLETON primitive
+;;;
+;;; Revision 1.33  2004/07/17 19:09:49  haase
+;;; Added morphfn for string->concepts
+;;;
+;;; Revision 1.32  2004/07/14 14:36:20  haase
+;;; Defined string->concepts for the BRICO module
+;;;
+;;; Revision 1.31  2004/05/04 01:04:51  haase
+;;; New BRICO
+;;;
+;;; Revision 1.1.1.1  2004/04/27 22:45:14  haase
+;;; Initial import of knoware repository.  This will contain code and small data
+;;; files built for beingmeta.
+;;;
+;;; Revision 1.2  2004/04/06 12:35:17  haase
+;;; Updated gloss methods
+;;;
+;;; Revision 1.30  2004/03/11 13:04:29  haase
+;;; Removed trace statement
+;;;
+;;; Revision 1.29  2004/03/08 16:05:45  haase
+;;; New brico modules
+;;;
+;;; Revision 1.1  2003/11/14 18:16:21  haase
+;;; Added brico modules
+;;;
+;;; Revision 1.27  2003/10/23 18:20:19  haase
+;;; Fixes to the BRICO module for new BRICO db
+;;;
+;;; Revision 1.26  2003/10/23 17:15:51  haase
+;;; Fixes to brico
+;;;
+;;; Revision 1.25  2003/08/27 10:53:28  haase
+;;; Merged 2.4 patches into trunk, started 2.5
+;;;
+;;; Revision 1.24.2.1  2002/08/21 22:03:50  haase
+;;; Kludged LANGID artifact from BRICO and removed redundant definitions in brico.fdx (also in brico-methods.fdx)
+;;;
+;;; Revision 1.24  2002/07/18 19:20:40  haase
+;;; Added cyc-comment to exports
+;;;
+;;; Revision 1.23  2002/07/16 15:24:21  haase
+;;; Added bigrams and trigrams
+;;;
+;;; Revision 1.22  2002/07/05 14:32:44  haase
+;;; Updated modules to use in-module implementation
+;;;
+;;; Revision 1.21  2002/06/25 17:05:12  haase
+;;; USE-BRICO now calls RESET-BRICO\!
+;;;
+;;; Revision 1.20  2002/06/25 17:03:46  haase
+;;; Rearrangements of new brico module
+;;;
+;;; Revision 1.19  2002/06/25 16:59:26  haase
+;;; Added new BRICO module which can be loaded without pool/index access
+;;;
+;;; Revision 1.18  2002/06/15 20:42:30  haase
+;;; Made IN-MODULE default to the same level of security as the current context
+;;;
+;;; Revision 1.17  2002/04/21 13:02:27  haase
+;;; Export given/family/middle name slots
+;;;
+
+

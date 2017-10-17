@@ -1,0 +1,149 @@
+#!@prefix@/bin/fdscript
+;; -*- Mode: fdscript; -*-
+
+;;; $Id: fdconfig.in,v 1.8 2002/04/02 21:43:06 haase Exp $
+
+(define fdconfig-commands
+  {"get" "set" "reset" "add" "locate" "list"})
+
+(define (show-usage)
+  (let ((filename (get-filename)))
+    (lineout "Usage: fdconfig [config file] get VAR"
+	     "\t\t (gets the values associated with VAR in "
+	     filename ")" )
+    (lineout "                              set VAR VALUE"
+	     "\t\t (sets the values associated with VAR in "
+	     filename ")")
+    (lineout "                              reset VAR"
+	     "\t\t (removes the values associated with VAR in "
+	     filename ")")
+    (lineout "                              add VAR VALUE"
+	     "\t\t (adds values to VAR in " filename ")")
+    (lineout "                              locate"
+	     "\t\t (reveals where the config file is)")
+    ;; Lists the contents of the config file
+    (lineout "                              list"
+	     "\t\t (lists the contents of the config file)")))
+
+(define (get-filename)
+  (cond ((contains? arg1 fdconfig-commands)
+	 (get-config-file))
+	((equal? arg1 "-config") (get-config-file))
+	((equal? arg1 "-profile")
+	 (try (getenv "CONFIG_FILE")
+	      (getenv "FRAMERD_PROFILE")
+	      "~/.fdprofile"))
+	((and (not (has-suffix ".cfg" arg1))
+	      (file-exists? (string-append arg1 ".cfg")))
+	 (string-append arg1 ".cfg"))
+	((file-exists? arg1) arg1)
+	(else (string-append arg1 ".cfg"))))
+
+;; We use this to manage exclusive access to the config file
+(define lock-file #f)
+(define (lock-config-file)
+  (set! lock-file (fopen-locked (stringout (get-filename) ".lck") "w")))
+(define (unlock-config-file)
+  (set! lock-file #f))
+
+(define (read-config-data file)
+  (if (file-exists? file)
+      (let* ((in (open-input-file file))
+	     (entry (read in))
+	     (entries '()))
+	(until (eof-object? entry)
+	  (set! entries (cons entry entries))
+	  (set! entry (read in)))
+	(reverse entries))
+      '()))
+(define (write-config-data filename entries)
+  (control-frame-printing 0)
+  (let ((file (open-output-file filename)))
+    (dolist (entry entries)
+      (pprint entry file) (newline file))))
+(define (get-config-entry entries var op)
+  (call/cc
+   (lambda (foundit)
+     (dolist (entry entries)
+       (if (and (eq? (car entry) var)
+		(if (not op) (= (length entry) 2)
+		    (eq? op (cadr entry))))
+	   (foundit entry))))))
+
+(define (read-value string)
+  (if (find (elt string 0) "\\\"(@#0123456789")
+      (read-from-string string)
+    (if (eqv? (elt string 0) #\:)
+	(read-from-string (subseq string 1))
+      string)))
+
+(define (remove-entries entries for-var)
+  (do ((scan entries (cdr scan)) (new '()))
+      ((null? scan) (reverse new))
+    (let ((entry (car scan)))
+      (unless (eq? (car entry) for-var)
+	(set! new (cons entry new))))))
+
+(define (add-entry entries for-var op val)
+  (do ((scan entries (cdr scan)) (new '()))
+      ((null? scan) (reverse new))
+    (let ((entry (car scan)))
+      (cond ((not (eq? (car entry) for-var))
+	     (set! new (cons entry new)))
+	    ((and (not op) (= (length entry) 2))
+	     (set! new (cons (list var val) new)))
+	    ((eq? op (cadr entry))
+	     (set! new (cons (list* var op val (cddr entry)) new)))))))
+
+(define (fdconfig args)
+  (case (length args)
+    (0 (show-usage))
+    (1 (qase (car args)
+	 ("locate"
+	  (lineout "  The FramerD configuration file is "
+	    (get-filename)))
+	 ("list" (dolist (entry (read-config-data (get-filename)))
+		   (if (= (length entry) 2) 
+		       (lineout " " (car entry) " = " (cadr entry))
+		       (lineout " " (car entry) " " (caddr entry) " "
+				(cadr entry)))))
+	 (else (show-usage))))
+    (2 (qase (car args)
+	 ("get"
+	  (let* ((var (read-from-string (elt args 1)))
+		 (entry (assoc var (read-config-data (get-filename)))))
+	    (cond ((not entry)
+		   (lineout "No value for " var))
+		  ((= (length entry) 2)
+		   (lineout " " (car entry) " = " (cadr entry)))
+		  (else
+		   (lineout " " (car entry) " " (caddr entry) " "
+			    (cadr entry))))))
+	 ("reset" (config-reset!
+		   (get-filename) (read-from-string (elt args 1))))
+	 ("use-pool"
+	  (let ((pool (use-pool (elt args 1))))
+	    (config-add! (get-filename)
+			 '%pooltab
+			 (vector (pool-base pool) (pool-capacity pool)
+				 (elt args 1)))))
+	 (else (show-usage))))
+    (3 (let ((config-file (get-filename))
+	     (var (read-from-string (elt args 1))))
+	 (qase (car args)
+	   ("set" (config-set! (get-filename) var (read-value (elt args 2))))
+	   ("add" (config-add! (get-filename) var (read-value (elt args 2))))
+	   ("use-server"
+	    (config-set! (get-filename) var '(use-server (elt args 2))))
+	   (else (show-usage)))))
+    (else (show-usage))))
+(define (main)
+  (cond ((< nargs 2) (show-usage))
+	((contains? arg1 fdconfig-commands)
+	 (fdconfig (cdr args)))
+	(else (fdconfig (cddr args)))))
+
+;;; $Log: fdconfig.in,v $
+;;; Revision 1.8  2002/04/02 21:43:06  haase
+;;; Added Id and log entries to scripts
+;;;

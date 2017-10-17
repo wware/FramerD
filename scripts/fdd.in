@@ -1,0 +1,15 @@
+#!@prefix@/bin/fdscript
+;; -*- Mode: fdscript; -*-
+
+;;; $Id: fdd.in,v 1.2 2002/04/02 21:43:06 haase Exp $
+
+(use-module 'fdshell)
+
+(define (main f)
+  (control-frame-printing 2)
+  (fdd (fdsh-arg f))) 
+
+;;; $Log: fdd.in,v $
+;;; Revision 1.2  2002/04/02 21:43:06  haase
+;;; Added Id and log entries to scripts
+;;;

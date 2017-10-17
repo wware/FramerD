@@ -1,0 +1,38 @@
+#!/bin/sh
+GROUP=`etc/get_framerd_group.sh`
+EXECUTABLES="bin/fdscript bin/fdserver bin/fdcgi bin/fdxml \
+             bin/dtcall bin/make-dtype bin/print-dtype \
+             bin/analyze-index bin/copy-index bin/repack-file-index bin/repack-file-pool"
+DOCS="docs/*.png docs/*.css docs/*.html"
+DTYPES_SO=libdtypes.so.1.0
+FRAMERD_SO=libframerd.so.1.0
+FDSCRIPT_SO=libfdscript.so.1.0
+FDTEXT_SO=libfdtext.so.1.0
+LIBRARIES="@BASELIBS@"
+SCRIPTS="etc/fdstartserver etc/fdservers etc/fdxs scripts/fdconfig \
+         scripts/fd_add scripts/fd_drop scripts/fd_find \
+         scripts/fd_get scripts/fd_test scripts/fd_id scripts/fd_make scripts/fdd \
+         scripts/make-super-pool  scripts/register-super-pool \
+         scripts/reset-file-pool  scripts/reset-file-index \
+  	 scripts/make-file-pool   scripts/make-file-index \
+         scripts/list-file-pool   scripts/unzipf-file-index \
+         scripts/rebase-file-pool scripts/rebase-file-index"
+# Make the directories
+@INSTALL@ -d -g ${GROUP} -m 0775 @prefix@/bin
+@INSTALL@ -d -g ${GROUP} -m 0775 @prefix@/lib
+@INSTALL@ -d -g ${GROUP} -m 0775 @prefix@/include/framerd
+@INSTALL@ -d -g ${GROUP} -m 0775 @prefix@/share/framerd/modules
+@INSTALL@ -d -g ${GROUP} -m 0775 @prefix@/share/framerd/docs
+@INSTALL@ -d -g ${GROUP} -m 0775 @prefix@/share/framerd/encodings
+# Install the files
+@INSTALL@ -g ${GROUP} ${LIBRARIES} @prefix@/lib
+@INSTALL@ -g ${GROUP} -m 0775  ${EXECUTABLES} @prefix@/bin
+@INSTALL@ -g ${GROUP} -m 0775 ${SCRIPTS} @prefix@/bin
+@INSTALL@ -g ${GROUP} -m 0664 include/framerd/*.h @prefix@/include/framerd
+@INSTALL@ -g ${GROUP} -m 0664 modules/*.fdx @prefix@/share/framerd/modules
+@INSTALL@ -g ${GROUP} -m 0664 ${DOCS}       @prefix@/share/framerd/docs
+#@INSTALL@ -g ${GROUP} -m 0664 ${ENCODINGS} @prefix@/share/framerd/encodings
+# Run the setup script
+LD_LIBRARY_PATH=@prefix@/lib:${LD_LIBRARY_PATH} \
+   @prefix@/bin/fdscript etc/setup.fdx @prefix@/share/framerd
+

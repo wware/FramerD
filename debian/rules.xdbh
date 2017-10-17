@@ -1,0 +1,101 @@
+#!/usr/bin/make -f
+# Sample debian/rules that uses debhelper.
+# This file is public domain software, originally written by Joey Hess. 
+
+# Uncomment this to turn on verbose mode.
+#export DH_VERBOSE=1
+
+# This is the debhelper compatability version to use.
+export DH_COMPAT=4
+
+DHBIN=/home/users/h/ha/haase/bin/debhelper/
+PERLLIB=/home/users/h/ha/haase/bin/debhelper
+export DH_AUTOSCRIPTDIR=/home/users/h/ha/haase/bin/debhelper/autoscripts
+export DEB_HOST_GNU_TYPE  ?= $(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
+export DEB_BUILD_GNU_TYPE ?= $(shell dpkg-architecture -qDEB_BUILD_GNU_TYPE)
+
+PREFIX = /usr
+MANDIR = $(PREFIX)/share/man
+
+DESTDIR := $(shell pwd)/debian/framerd
+
+INSTALL = install --preserve-timestamps
+
+CONF_FLAGS = --build=$(DEB_BUILD_GNU_TYPE) --host=$(DEB_HOST_GNU_TYPE) \
+	--prefix=$(PREFIX) --mandir=$(MANDIR)
+
+#configure: configure.in
+#	autoconf
+
+configure: configure-stamp
+configure-stamp:
+	$(DHBIN)dh_testdir
+	./configure $(CONF_FLAGS) --without-fastcgi --enable-shared \
+                    --with-config-file=/etc/framerd.cfg
+	-rm -f debian/framerd.init
+	ln etc/framerd debian/framerd.init
+	touch configure-stamp
+
+build: configure-stamp build-stamp
+build-stamp:
+	$(DHBIN)dh_testdir
+	$(MAKE) XCFLAGS="-g0"
+	touch build-stamp
+
+clean:
+	$(DHBIN)dh_testdir
+	$(DHBIN)dh_testroot
+	rm -f build-stamp configure-stamp
+	if [ -f makefile ]; then $(MAKE) distclean; fi
+	-rm -f debian/framerd.init
+	$(DHBIN)dh_clean
+
+install: build
+	$(DHBIN)dh_testdir
+	$(DHBIN)dh_testroot
+	$(DHBIN)dh_clean -k
+	$(DHBIN)dh_installdirs
+	$(MAKE) DESTDIR=$(DESTDIR) XMODE=0755 FMODE=0644 install-core
+	$(MAKE) DESTDIR=$(DESTDIR) XMODE=0755 FMODE=0644 \
+		install-docs install-headers install-elisp-blindly
+	install -m0755 etc/setup.fdx debian/framerd/usr/sbin/framerd-setup
+	# Move documentation into legacy location
+	#install -d $(DESTDIR)/usr/doc/framerd
+	#ln -s /usr/share/doc/framerd $(DESTDIR)/usr/doc/framerd
+
+# Build architecture-independent files here.
+binary-indep: build install
+# We have nothing to do by default.
+
+# Build architecture-dependent files here.
+binary-arch: build install
+#	$(DHBIN)dh_testversion
+	$(DHBIN)dh_testdir
+	$(DHBIN)dh_testroot
+#	$(DHBIN)dh_installdebconf	
+	$(DHBIN)dh_installdocs
+	$(DHBIN)dh_installexamples
+	$(DHBIN)dh_installmenu
+	$(DHBIN)dh_installemacsen
+#	$(DHBIN)dh_installpam
+#	$(DHBIN)dh_installmime
+	$(DHBIN)dh_installinit
+	$(DHBIN)dh_installcron
+	$(DHBIN)dh_installmanpages
+	$(DHBIN)dh_installinfo
+#	$(DHBIN)dh_undocumented
+	$(DHBIN)dh_installchangelogs
+	$(DHBIN)dh_link
+	$(DHBIN)dh_strip
+	$(DHBIN)dh_compress
+	$(DHBIN)dh_fixperms
+	$(DHBIN)dh_makeshlibs
+	$(DHBIN)dh_installdeb
+#	$(DHBIN)dh_perl
+	$(DHBIN)dh_shlibdeps -llib
+	$(DHBIN)dh_gencontrol
+	$(DHBIN)dh_md5sums
+	$(DHBIN)dh_builddeb
+
+binary: binary-indep binary-arch
+.PHONY: build clean binary-indep binary-arch binary install

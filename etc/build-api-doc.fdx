@@ -1,0 +1,200 @@
+;(in-module build-api-doc fdtext htmlgen fdscript-module)
+
+(use-module! htmlgen)
+
+;; This module uses the commenting conventions in the C sources to
+;; automatically construct documentation for the FramerD C API.
+
+(define api-pattern
+  #((isalpha+) "_EXPORT" "\n/*" (* (not> "*/")) "*/"
+    (* (isspace)) (+ #((csymbol) (isspace+))) (* "*")
+    (* (not> "(")) "(" (not ")") ")"))
+(define (parse-fcn-header string)
+  (let ((comment #f) (prototype #f))
+    (tx-match #((ISALPHA+) "_EXPORT" (isspace+) "/*"
+		(isspace+) (= comment (* (not> "*/")))
+		"*/" (isspace+)
+		(= prototype (* (char-not "{"))) )
+	      string)
+    (list (parse-fcn-documentation comment)
+	  (parse-fcn-decl prototype))))
+(define (parse-fcn-decl string)
+  (let ((paren (position #\( string)))
+    (let ((headr (reverse (segment (subseq string 0 paren)
+				   '(+ {" " "\t"}))))
+	  (args (subseq string paren)))
+      (when (eqv? (elt (car headr) 0) #\*)
+	(set! headr (list* (subseq (car headr) 1)
+			   "*" (cdr headr))))
+      (list (subseq args 1 (1- (length args)))
+	    (reverse (cdr headr))
+	    (car headr)))))
+(define (parse-fcn-documentation string)
+  (let* ((name-end (position #\Newline string))
+	 (arg-start (search "Arguments:" string name-end))
+	 (val-start (search "Returns:" string arg-start))
+	 (doc-start (position #\Newline string val-start)))
+    (if (and name-end arg-start val-start)
+	(list (string-trim
+	       (subseq string
+		       (+ arg-start (length "Arguments:")) val-start))
+	      (string-trim
+	       (subseq string
+		       (+ val-start (length "Returns:")) doc-start))
+	      (and doc-start (string-trim (subseq string doc-start))))
+      (begin (lineout "Problem parsing doc string")
+	     (write string)
+	     string))))
+
+(define (get-fcn-name text)
+  (let ((entry (parse-fcn-header text)))
+    (if (and (pair? (car entry)) (pair? (cadr entry)))
+	(caddr (cadr entry))
+	(fail))))
+
+(define (get-fcn-names file)
+  (get-fcn-name (tx-gather api-pattern (filestring file))))
+
+(define (generate-doc text)
+  (let ((entry (parse-fcn-header text)))
+    (if (and (pair? (car entry)) (pair? (cadr entry)))
+	(let* ((text-stuff (car entry))
+	       (c-stuff (cadr entry))
+
+	       (arg-text (car text-stuff))
+	       (arg-decls (car c-stuff))
+
+	       (value-text (cadr text-stuff))
+	       (value-decls (cadr c-stuff))
+
+	       (fcn-name (caddr c-stuff))
+	       (doc-text (caddr text-stuff)))
+	  (TR (TD* (ALIGN 'LEFT VALIGN 'TOP CLASS "ccode") (A (NAME fcn-name) fcn-name))
+	      (TD* (CLASS "ccode") arg-decls)
+	      (TD* (CLASS "ccode") (dolist (vd value-decls) (html vd " "))))
+	  (TR (TH "") (TD arg-text) (TD value-text))
+	  (when doc-text
+	    (TR (TH "") (TD (em doc-text)) (TD ""))))
+      (lineout "Problem with entry " entry))))
+
+(define (generate-api-doc file)
+  (let* ((string (filestring file))
+	 (docs (tx-gather api-pattern string)))
+    (lineout "Generating api docs for " file)
+    (A (NAME (basename file)) (H2 "Functions defined in " (tt file)))
+    (P (doseq (fcn-name (sorted (get-fcn-name docs)))
+	 (html (anchor (string-append "#" fcn-name) (TT fcn-name)) " | ")))
+    (table* (CELLPADDING 5)
+     (TR (TH* (ALIGN 'LEFT) "Function")
+	 (TH* (ALIGN 'LEFT) "Arguments")
+	 (TH* (ALIGN 'LEFT) "Returns"))
+     (do-choices (doc docs) (generate-doc doc)))))
+
+(define (generate-api-refs . functions)
+  (dolist (fcn functions)
+    (html (ANCHOR (string-append "framerd-capi.html#" fcn) fcn) "\n")))
+
+(define util-files
+  (choice "src/os/except.c" "src/os/fdmalloc.c" "src/os/network.c"
+	  "src/os/envfns.c" "src/os/filefns.c" "src/os/timefns.c"
+	  "src/os/i18n.c" "src/os/fdprintf.c"))
+(define dtype-files
+  (choice "src/cons/data.c" "src/cons/xdata.c"
+	  "src/cons/io.c" "src/cons/hash.c"
+	  "src/cons/choices.c" "src/cons/slotmaps.c"
+	  "src/cons/oids.c" "src/cons/consed-oids.c" "src/cons/lightweight-oids.c"
+	  "src/cons/libdtypes.c"))
+(define framerd-files
+  (choice "src/odb/odb.c" "src/odb/super-pool.c" "src/odb/pools.c" 
+	  "src/odb/file-pool.c" "src/odb/network-pool.c"
+	  "src/odb/frames.c" "src/odb/libframerd.c"
+	  "src/index/index.c" "src/index/search.c"
+	  "src/index/network-index.c" "src/index/file-index.c"
+	   "src/index/portahash.c"))
+(define eval-files
+  (choice "src/eval/eval.c" "src/eval/ndeval.c"
+	  "src/eval/lambda.c" "src/eval/mini.c"
+	  "src/eval/sandbox.c" "src/eval/threads.c"
+	  "src/eval/load.c" "src/eval/libfdeval.c"))
+(define scheme-files
+  (choice "src/scheme/reflect.c" "src/scheme/special.c"
+	  "src/scheme/arith.c" "src/scheme/bignum.c"
+	  "src/scheme/pairs.c" "src/scheme/cxr.c" "src/scheme/records.c"
+	  "src/scheme/characters.c" "src/scheme/strings.c"
+	  "src/scheme/ioprims.c" "src/scheme/libfdscheme.c"))
+(define fdscript-files
+  (choice "src/fdscript/seq.c" "src/fdscript/prims.c"
+	  "src/fdscript/printout.c" "src/fdscript/osprims.c" 
+	  "src/fdscript/hashprims.c"  "src/fdscript/framerd.c"
+	  "src/fdscript/maint.c" "src/fdscript/libfdscript.c"))
+(define fdtext-files
+  (choice "src/text/text.c" "src/text/match.c"
+	  "src/text/stem.c" "src/text/getnames.c" "src/text/md5c.c"
+	  "src/text/htmlgen.c" "src/text/mime.c" "src/text/xml.c"))
+(define misc-files
+  (choice "src/misc/server.c" "src/misc/cgiparse.c" "src/misc/console.c"
+	  "src/misc/indextools.c"))
+
+(define man-page-template (filestring (get-component "man-template.2")))
+
+(define (do-subst string rules)
+  (if (null? rules) string
+      (do-subst (string-subst string (car (car rules)) (cadr (car rules)))
+		(cdr rules))))
+
+(define (guess-summary string)
+  (let ((pos (tx-search (qc '{"," "." ";" "\n"}) string)))
+    (subseq string 0 pos)))
+
+(define (generate-man-page text (file-prefix #f))
+  (let* ((entry (parse-fcn-header text))
+	 (text-stuff (car entry))
+	 (c-stuff (cadr entry))
+	 (string 
+	  (do-subst man-page-template
+		    `(("%FCN_NAME%" ,(string-trim (caddr c-stuff)))
+		      ("%RET_TYPE%" ,(apply string-append (cadr c-stuff)))
+		      ("%FCN_ARGS%" ,(car c-stuff))
+		      ("%ARG_INFO%" ,(car text-stuff))
+		      ("%RET_INFO%" ,(cadr text-stuff))
+		      ("%DESCRIPTION%" ,(or (caddr text-stuff) ""))
+		      ("%SUMMARY%" , (if (caddr text-stuff)
+					 (guess-summary (caddr text-stuff)) ""))))))
+    (if file-prefix
+	(display string (open-output-file
+			 (string-append file-prefix (string-trim (caddr c-stuff)) ".2")))
+	string)))
+
+(define (main)
+  (write-html-file
+   "docs/framerd-capi.html"
+   (title "FramerD Kernel APIs")
+   (stylesheet! "framerd.css")
+   (H1 "FramerD Kernel APIs")
+   (P "Automatically Generated by " arg0 " at " (iso-timestring))
+   (H2 "Summary")
+   (TABLE* (WIDTH "100%")
+	   (do-choices (file (choice util-files dtype-files framerd-files eval-files
+				     scheme-files fdscript-files fdtext-files misc-files))
+	     (let ((fcns (get-fcn-names file)))
+	       (when (exists? fcns)
+		 (TR (TH* (VALIGN 'TOP ALIGN 'LEFT)
+			  (anchor (stringout "#" (basename file)) (TT file)))
+		     (TD* (VALIGN 'TOP ALIGN 'LEFT)
+			  (doseq (fcn (sorted (get-fcn-names file)))
+			    (html (anchor (stringout "#" fcn) (tt* (style "font-size: small;") fcn)) " | "))))))))
+   (generate-api-doc util-files)
+   (generate-api-doc dtype-files)
+   (generate-api-doc framerd-files)
+   (generate-api-doc eval-files)
+   (generate-api-doc scheme-files)
+   (generate-api-doc fdscript-files)
+   (generate-api-doc fdtext-files)
+   (generate-api-doc misc-files))
+  (do-choices (file (choice util-files dtype-files framerd-files
+			    eval-files scheme-files fdscript-files
+			    fdtext-files misc-files))
+    (do-choices (fcn-text (tx-gather api-pattern (filestring file)))
+      (generate-man-page fcn-text "docs/man2/"))))
+
+

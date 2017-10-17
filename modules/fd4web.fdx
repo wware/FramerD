@@ -1,0 +1,536 @@
+(in-module 'fd4web '{brico index-plus fdtext htmlgen fdinternals})
+
+(if (exists? (get-module 'cgitools))
+    (use-module 'cgitools)
+    (use-module 'fakecgi))
+
+;;; Initializations
+
+(define javascript-refile
+"
+<SCRIPT LANGUAGE='Javascript'>
+<!--
+function refile_form () {
+  document.fdedit.submit(); }
+-->
+</SCRIPT>
+"
+)
+
+(define (active-radiobutton var val checked)
+  (htmltag 'input 'type 'radio 'name var
+	   'value val 'onclick "refile_form()"
+	   (if checked " CHECKED" "")))
+
+(define (language-button val checked)
+  (htmltag 'input 'type 'radio 'name 'newlang
+	   'value val 'onclick "change_language()"
+	   (if checked " CHECKED" "")))
+
+(define morphfn #f)
+
+(define (set-morphfn! f) (set! morphfn f))
+
+(define (cgi-get cdata var (parser #f))
+  (let ((v (get cdata var)))
+    (if parser
+	(if (string? v) (parser v)
+	  (if (pair? v) (parser (elts v)) v))
+      (if (string? v) v
+	  (if (pair? v) (elts v) v)))))
+
+(define (string-reader string)
+  (if (equal? string "") 'empty
+      (try (read-from-string string) (string->symbol string))))
+
+(define time+ timestamp-plus)
+(define 1year (* 365 24 3600))
+
+;;;; Getting language information
+
+(define default-languages (?? 'langid '{en es nl pt fi fr de it}))
+(define default-language (?? 'langid 'en))
+(define persistent-language {})
+
+(define (lookup-langid langid)
+  (try (?? 'langid langid)
+       (?? 'langid (string-downcase langid))
+       (?? 'langid (subseq langid 0 2))
+       (?? 'langid (string-downcase (subseq langid 0 2)))))
+
+(define (get-default-languages cdata)
+  (try (cgi-get cdata 'fd_languages string-reader)
+       (if (exists? (get cdata 'accepted-languages))
+	   (if (< (length (get cdata 'accepted-languages)) 3)
+	       ;; If the have one or zero languages accepted,
+	       ;; add in the defaults for show
+	       (choice
+		(lookup-langid (car (elts (get cdata 'accepted-languages))))
+		default-languages)
+	       (try
+		(lookup-langid (car (elts (get cdata 'accepted-languages))))
+		default-languages))
+	   default-languages)
+       default-languages))
+
+(define (get-languages (data #f))
+  (let ((cdata (or data (cgi-data))))
+    (try (cgi-get cdata 'languages string-reader)
+	 (choice (get-language cdata)
+		 (get-default-languages cdata)))))
+
+(define (get-default-language cdata)
+  (try (cgi-get cdata 'fd_language string-reader)
+       (if (exists? (get cdata 'accepted-languages))
+	   (do ((langs (get cdata 'accepted-languages) (cdr langs)))
+	       ((or (null? langs) (exists? (lookup-langid (car (car langs)))))
+		(if (null? langs) default-language
+		    (lookup-langid (car (car langs))))))
+	   default-language)))
+
+(define (get-language (data #f) (var #f))
+  (let ((cdata (or data (cgi-data))))
+    (choice
+     (let ((val (get cdata (or var 'language))))
+       (cond ((fail? val) (get-default-language cdata))
+	     ((and (string? val) (eqv? (elt val 0) #\@)) (parse-arg val))
+	     ((oid? val) val)
+	     ((string? val)
+	      (try (?? 'language (string-reader val))
+		   (?? 'langid (choice val (string-downcase val)))
+		   (get-default-language cdata)))))
+     persistent-language)))
+
+(define (get-informant (data #f))
+  (let ((cdata (or data (cgi-data))))
+    (try (cgi-get cdata 'fd_informant string-reader)
+	 (let* ((entry (if (bound? userver) (dtcall userver informant cdata)
+			   (try (string->symbol (get cdata 'remote_user))
+				(stringout (try (get cdata 'remote_host)
+						(get cdata 'remote_address))
+					   "/" (random 250000000))))))
+	   (warn "entry=" entry)
+	   (cond ((string? entry)
+		  (set-cookie! 'fd_informant entry "/"))
+		 ((symbol? entry)
+		  (set-cookie! 'fd_informant entry "/" (time+ (timestamp) (* 1 1year))))
+		 (else (set-cookie! 'fd_informant entry "/" (time+ (timestamp) (* 5 1year)))))
+	   (%set! cdata 'fd_informant entry)
+	   entry))))
+
+(define (get-logentry (data #f))
+  (let ((cdata (or data (cgi-data))))
+    (get-informant cdata)		; We get the informant if possible
+    (try (cgi-get cdata 'logentry string-reader)
+	 (if (bound? editlogger)
+	     (let* ((entry (dtcall editlogger logentry cdata)))
+	       (when (exists? entry)
+		 (%set! cdata 'logentry entry))
+	       entry)
+	     (fail)))))
+
+(define (reconcile! cdata frame slotid values)
+  (let ((current (get frame slotid))
+	(entry (get-logentry cdata)))
+    (index-slots frame slotid (difference values current))
+    (retract! frame slotid (difference current values))
+    (assert! frame slotid (difference values current))
+    (add! cdata 'drops (list* frame slotid
+				 (choices->list values) (choices->list current)
+				 (choices->list (difference current values))))
+    (add! cdata 'adds (list* frame slotid
+				(choices->list values) (choices->list current)
+				(choices->list (difference values current))))    
+    (unless (test frame 'edits entry)
+      (add! frame 'edits entry)
+      (add! cdata 'edits entry))))
+
+(define (get-words concept (data #f))
+  (try (get concept (get-language data))
+       (get concept default-language)
+       (get concept 'words)))
+
+(define (get-slotid-base slotid)
+  (if (symbol? slotid) slotid
+      (if (oid? slotid)
+	  (string->symbol
+	   (stringout "S" (OID-ADDR-HIGH slotid) "_" (OID-ADDR-LOW slotid)))
+	  (error "Invalid slotid" slotid))))
+
+(define (slotvar base id)
+  (if (string? base)
+      (string->symbol (stringout base "-" id))
+      (string->symbol (stringout (get-slotid-base base) "-" id))))
+
+(define (generic-slot slotid parser (data #f))
+  (let* ((cdata (or data (cgi-data)))
+	 (frame (parse-arg (get cdata 'frame)))
+	 (language (get-language cdata))
+	 (base (get-slotid-base slotid))
+	 (varname (slotvar base 'string))
+	 (addname (slotvar base 'add))
+	 (actionname (slotvar base 'action))
+	 (action (get cdata actionname))
+	 (general-action (get cdata 'action))
+	 (possible-values (choice (cgi-get cdata varname parser)
+				  (parser (get cdata addname))
+				  (get frame slotid)))
+	 (selected-values
+	  (choice (cgi-get cdata varname parser)
+		  (parser (get cdata addname))
+		  (if (fail? (get cdata base))
+		      (get frame slotid) (fail))))
+	 (actual-values (get frame slotid)))
+    (when (or (equal? action "Commit")
+	      (equal? general-action "Commit")
+	      (equal? general-action "Create")
+	      (equal? general-action "Clone"))
+      (reconcile! cdata frame slotid (qc selected-values)))
+    (cgipass base slotid) (cgipass 'slots slotid)
+    (TR (TD* (CLASS "slotbar" COLSPAN 3) (HR)))
+    (TR (TH* (CLASS "slotid") slotid "&nbsp;&nbsp;")
+	(TD* (CLASS "textfield") (TEXTFIELD addname 60 "") (SUBMIT actionname "Add"))
+	(TH* (CLASS "buttons")
+	     (if (exists? frame) (SUBMIT actionname "Commit") "&nbsp;")))
+    (A* (NAME base))
+    (TR (TH* (CLASS "blank") "&nbsp;")
+	(TD* (CLASS "slotvalues" COLSPAN 2)
+	     (do-choices (value possible-values)
+	       (html (checkbox varname value (contains? value selected-values))
+		     "&nbsp;" (if (contains? value actual-values)
+				  (strong value) (em value)) " "))))))
+
+(define (generic-sv-slot slotid parser (data #f))
+  (let* ((cdata (or data (cgi-data)))
+	 (frame (parse-arg (get cdata 'frame)))
+	 (language (get-language cdata))
+	 (base (get-slotid-base slotid))
+	 (varname (slotvar base 'string))
+	 (actionname (slotvar base 'action))
+	 (action (get cdata actionname))
+	 (general-action (get cdata 'action))
+	 (value (try (parser (get cdata varname))
+		     (get frame slotid))))
+    (when (or (equal? action "Commit")
+	      (equal? general-action "Commit")
+	      (equal? general-action "Create")
+	      (equal? general-action "Clone"))
+      (reconcile! cdata frame slotid (qc value)))
+    (cgipass base slotid) (cgipass 'slots slotid)
+    (TR (TD* (CLASS "slotbar" COLSPAN 3) (HR)))
+    (TR (TH* (CLASS "slotid") slotid "&nbsp;&nbsp;")
+	(TD* (CLASS "textfield")
+	     (TEXTFIELD varname 60
+			(if (fail? value) "" (write-to-string value)))
+	     (SUBMIT actionname "Change"))
+	(TH* (CLASS "buttons")
+	     (if (exists? frame) (SUBMIT actionname "Commit") "&nbsp;")))
+    (A* (NAME base))))
+
+(define (lisp-read string)
+  (if (= (length (string-trim string)) 0) (fail)
+    (string-reader string)))
+(define (string-read string)
+  (if (= (length (string-trim string)) 0) (fail)
+    (convert-character-entities string)))
+
+(define (string-slot slotid (data #f))
+  (generic-slot slotid string-read (or data (cgi-data))))
+(define (parsed-slot slotid (data #f))
+  (generic-slot slotid lisp-read (or data (cgi-data))))
+
+(define (string-sv-slot slotid (data #f))
+  (generic-sv-slot slotid string-read (or data (cgi-data))))
+(define (parsed-sv-slot slotid (data #f))
+  (generic-sv-slot slotid lisp-read  (or data (cgi-data))))
+
+;;; Paragraph slots
+
+(define (paragraph-slot slotid (data #f))
+  (let* ((cdata (or data (cgi-data)))
+	 (frame (parse-arg (get cdata 'frame)))
+	 (language (get-language cdata))
+	 (base (get-slotid-base slotid))
+	 (varname (slotvar base 'string))
+	 (actionname (slotvar base 'action))
+	 (action (get cdata actionname))
+	 (general-action (get cdata 'action))
+	 (value (get frame slotid)))
+    (when (or (equal? action "Commit")
+	      (equal? general-action "Commit")
+	      (equal? general-action "Create")
+	      (equal? general-action "Clone"))
+      (reconcile! cdata frame slotid (qc value)))
+    (cgipass base slotid) (cgipass 'slots slotid)
+    (TR (TD* (CLASS "slotbar" COLSPAN 3) (HR)))
+    (TR (TH* (CLASS "slotid") slotid "&nbsp;&nbsp;")
+	(TD* (CLASS "textfield")
+	     (TEXTAREA varname 60 10 (try value ""))
+	     (SUBMIT actionname "Change"))
+	(TH* (CLASS "buttons")
+	     (if (exists? frame) (SUBMIT actionname "Commit") "&nbsp;")))
+    (A* (NAME base))))
+
+;;; Browsed slots
+
+(define (browsed-slot slotid (data #f))
+  (let* ((cdata (or data (cgi-data)))
+	 (frame (parse-arg (get cdata 'frame)))
+	 (language (get-language cdata))
+	 (base (get-slotid-base slotid))
+	 (selname (slotvar base 'selected))
+	 (expname (slotvar base 'expanded))
+	 (cuename (slotvar base 'cue))
+	 (actionname (slotvar base 'action))
+	 (selected-values (cgi-get cdata selname parse-arg))
+	 (actual-values (get frame slotid))
+	 (expanded (cgi-get cdata expname parse-arg))
+	 (general-action (get cdata 'action))
+	 (cue (get cdata cuename))
+	 (action (get cdata actionname))
+	 (displayed (make-hashset)))
+    (when (or (equal? action "Commit")
+	      (equal? general-action "Commit")
+	      (equal? general-action "Create")
+	      (equal? general-action "Clone"))
+      (reconcile! cdata frame slotid (qc selected-values)))
+    (cgipass base slotid) (cgipass 'slots slotid)
+    (TR (TD* (CLASS "slotbar" COLSPAN 3) (HR)))
+    (TR (TH* (CLASS "slotid") slotid "&nbsp;&nbsp;")
+	(TD* (CLASS "textfield") (textfield cuename 60 (try cue "")))
+	(TH* (CLASS "rbuttons")
+	     (SUBMIT actionname "Cue")
+	     (if (exists? frame) (html (BR) (SUBMIT actionname "Commit")) "")))
+    (A* (NAME base))
+    (prefetch (choice (get frame slotid) selected-values expanded))
+    (prefetch (get (choice (get frame slotid) selected-values expanded)
+		   genls))
+    (if (or (exists? selected-values) (contains? selname (fslots cdata)))
+	(let ((above-the-box (choice (get frame slotid) selected-values expanded)))
+	  (doseq (item (sorted above-the-box))
+	    (concept-row cdata displayed item (qc actual-values)
+			 selname (contains? item selected-values)
+			 expname (contains? item expanded))
+	    (when (contains? item expanded)
+	      (concept-expansion cdata item selname (qc selected-values)))))
+      ;; If we don't have any selected values, generate checked checkboxes
+      ;;  for all of the current values
+      (do-choices (value (get frame slotid))
+	(concept-row cdata displayed value (qc actual-values)
+		     selname #t expname #f)))
+    ;; This generates the unselected concepts which are derived from the cue
+    (do-choices (concept (get-concepts-from-cues cue cdata))
+      (unless (hashset-get displayed concept)
+	(concept-row cdata displayed concept (qc actual-values)
+		     selname #f expname (contains? concept expanded))
+	(when (contains? concept expanded)
+	  (concept-expansion cdata concept selname (qc selected-values)))))))
+
+(define (concept-row cdata displayed concept actual selname selected expname expanded)
+  (unless (hashset-get displayed concept)
+    (hashset-add! displayed concept)
+    (TR (TH* (CLASS "cbox")
+	     (htmltag 'input 'type 'checkbox 'name selname
+		      'value concept 'onclick "refile_form()"
+		      (if selected " CHECKED" "")))
+	(TD* (CLASS "concept")
+	     (display-concept cdata concept selected (contains? concept actual)))
+	(TH* (CLASS "rbuttons")
+	     (when (exists? (get concept specls))
+	       (html "expand ")
+	       (htmltag 'input 'type 'checkbox 'name expname
+			'value concept 'onclick "refile_form()"
+			(if expanded " CHECKED" "")))))))
+
+(define (word-list words)
+  (doseq (word (sortby length words) i)
+    (if (= i 0) (html word) (html " . " word))))
+
+(define (concept-expansion cdata item selname selected-values)
+  (let ((speczns (get item specls)))
+    (when (exists? speczns)
+      (TR (TH* (CLASS "spacing") "&nbsp;")
+	  (TD* (CLASS "expansion")
+	       (do-choices (s speczns)
+		 (span (class "nobreak")
+		       (htmltag 'input 'type 'checkbox 'name selname
+				'value s 'onclick "refile_form()"
+				(if (contains? s selected-values) " CHECKED" ""))
+		       (html "&nbsp;")
+		       (anchor s (word-list (qc (get-words s cdata)))))
+		 (html "  ")))))))
+
+(define (display-concept cdata concept selected actual)
+  (anchor concept
+	  (if actual
+	      (strong (word-list (qc (get-words concept cdata))))
+	    (em (word-list (qc (get-words concept cdata))))))
+  (if (exists? (get cdata 'edit-concepts))
+      (html "&nbsp;[" (anchor (scripturl "/brico/edit.fdcgi" concept) "edit") "]"))
+  (if (exists? (get concept 'gloss)) ; (and (not selected) (exists? (get concept 'gloss)))
+      (HTML (BR) (EM (get concept 'gloss))))
+  (BR) (when (exists? (get concept 'sense-category))
+	 (html (get concept 'sense-category)  "&nbsp;"))
+  (when (exists? (get concept genls))
+    (do-choices (hyp (get concept genls))
+      (anchor hyp (word-list (qc (get-words hyp cdata))))
+      (html " &nbsp;.&nbsp; "))))
+
+(define (browsed-field cgi-data var parsers up (down #f))
+  (let ((down (or down (if (oid? up) (get up inverse) {})))
+	(text-name (slotvar var 'text)))
+    (textfield text-name 60 (get cgi-data text-name))
+    (let ((selected (elts (map read-from-string (get cgi-data var))))
+	  (added (apply-parsers parsers (get cgi-data text-name))))
+      )))
+
+;(define (browsed-field label base actual potential (cdata #f))
+;  (let* ((cdata (or cdata (cgi-data)))
+;	 (language (get-language cdata))
+;	 (selname (slotvar base 'selected))
+;	 (expname (slotvar base 'expanded))
+;	 (cuename (slotvar base 'cue))
+;	 (actionname (slotvar base 'action))
+;	 (selected-values (cgi-get cdata selname parse-arg))
+;	 (expanded (cgi-get cdata expname parse-arg))
+;	 (cue (get cdata cuename))
+;	 (action (get cdata actionname))
+;	 (displayed (make-hashset)))
+;    (when (equal? action "Revert") (set! selected-values (choice)))
+;    (TR (TD* (CLASS "slotbar" COLSPAN 3) (HR)))
+;    (TR (TH* (CLASS "slotid") label "&nbsp;&nbsp;")
+;	(TD* (CLASS "textfield") (textfield cuename 60 (try cue "")))
+;	(TH* (CLASS "buttons")
+;	     (SUBMIT actionname "Cue") (br)
+;	     (SUBMIT actionname "Revert") (br)
+;	     (SUBMIT actionname "Commit")))
+;    (A* (NAME base))
+;    ;; This generates the items which are above the text box; in particular,
+;    ;; those which are either already selected or have been expanded
+;    (if (or (exists? selected-values) (contains? selname (fslots cdata)))
+;	(let ((above-the-box (choice selected-values expanded)))
+;	  (doseq (item (sorted above-the-box))
+;	    (concept-row cdata displayed item (qc actual)
+;			 selname (contains? item selected-values)
+;			 expname (contains? item expanded))
+;	    (when (contains? item expanded)
+;	      (concept-expansion cdata item selname (qc selected-values)))))
+;      ;; If we don't have any selected values, generate checked checkboxes
+;      ;;  for all of the current values
+;      (do-choices (value actual)
+;	(concept-row cdata displayed value (qc actual)
+;		     selname #t expname #f)))
+;    ;; This generates the unselected concepts which are derived from the cue
+;    (do-choices (concept (get-concepts-from-cues cue cdata))
+;      (concept-row cdata displayed concept (qc actual)
+;		   selname #f expname #f))
+;    (do-choices (concept potential)
+;      (concept-row cdata displayed concept (qc actual)
+;		   selname #f expname #f))))
+;
+;(define (cbrowser edit-action actual potential (cdata #f))
+;  (let* ((cdata (or cdata (cgi-data)))
+;	 (base 'concepts)
+;	 (language (get-language cdata))
+;	 (selname (slotvar base 'selected))
+;	 (expname (slotvar base 'expanded))
+;	 (cuename (slotvar base 'cue))
+;	 (actionname (slotvar base 'action))
+;	 (selected-values (cgi-get cdata selname parse-arg))
+;	 (expanded (cgi-get cdata expname parse-arg))
+;	 (cue (get cdata cuename))
+;	 (action (get cdata actionname))
+;	 (displayed (make-hashset)))
+;    (when (equal? action "Revert") (set! selected-values (choice)))
+;    (TR (TD* (CLASS "slotbar" COLSPAN 3) (HR)))
+;    (TR (TH* (CLASS "slotid") label "&nbsp;&nbsp;")
+;	(TD* (CLASS "textfield")
+;	     (textfield cuename 60 (try cue "")) (SUBMIT actionname "Cue")))
+;    ;; This generates the items which are above the text box; in particular,
+;    ;; those which are either already selected or have been expanded
+;    (if (or (exists? selected-values) (contains? selname (fslots cdata)))
+;	(let ((above-the-box (choice selected-values expanded)))
+;	  (doseq (item (sorted above-the-box))
+;	    (concept-row cdata displayed item (qc actual)
+;			 selname (contains? item selected-values)
+;			 expname (contains? item expanded))
+;	    (when (contains? item expanded)
+;	      (concept-expansion cdata item selname (qc selected-values)))))
+;	;; If we don't have any selected values, generate checked checkboxes
+;	;;  for all of the current values
+;	(do-choices (value actual)
+;	  (concept-row cdata displayed value (qc actual)
+;		       selname #t expname #f)))
+;    ;; This generates the unselected concepts which are derived from the cue
+;    (do-choices (concept (get-concepts-from-cues cue cdata))
+;      (concept-row cdata displayed concept (qc actual)
+;		   selname #f expname #f))
+;    (do-choices (concept potential)
+;      (concept-row cdata displayed concept (qc actual)
+;		   selname #f expname #f))))
+
+;;; Expanding keyword specs
+
+(define (get-concepts-from-cues string (cdata #f))
+  (words->concepts string (get-language cdata)))
+
+(define (concept-ok? c) (exists? (get c 'sense-category)))
+
+(define (words->concepts keywords language)
+  (filter-choices (concept (expand-keywords keywords language))
+    (concept-ok? concept)))
+
+(define (expand-keyword keyword language)
+  (if (find #\: keyword)
+      (let* ((split (position #\: keyword))
+	     (left (expand-keyword (subseq keyword 0 split) language))
+	     (right (expand-keyword (subseq keyword (1+ split)) language)))
+	(filter-choices (cand left)
+	  (value-path? cand (choice 'hypernym genls) right)))
+      (let ((expansions (choice keyword (stdstring keyword)
+				(if (and morphfn (exists? language))
+				    (let ((roots (morphfn keyword language)))
+				      (choice roots (stdstring roots)))
+				    (fail)))))
+	(try (find-frames %background (choice language 'names) expansions)
+	     (find-frames %background 'words expansions)))))
+
+(define (expand-keywords keywords language)
+  (expand-keyword (string-trim (elts (segment keywords "|"))) language))
+
+;;; Just display
+
+(define (dot-words words)
+  (doseq (word (sorted words length) i)
+    (if (= i 0) (html word) (html " . " word))))
+
+(define (display-concept-values frame slotid language (show-genls #t))
+  (when (exists? (get frame slotid))
+    (TR (TH* (valign 'top align 'right) slotid)
+	(TD* (valign 'top align 'left) 
+	     (do-choices (f (get frame slotid))
+	       (let ((words (try (get f language) (get f 'words))))
+		 (if (fail? words) (html f) (anchor f (dot-words (qc words)))))
+	       (if (exists? (get f 'sense-category))
+		   (TT " " (get f 'sense-category) " "))
+	       (when show-genls
+		 (font (size "-1")
+		   (do-choices (g (get f genls))
+		     (let ((words (try (get g language) (get g 'words))))
+		       (if (fail? words) (html g) (dot-words (qc words)))))))
+	       (br))))))
+
+;;; Exports
+
+(module-export!
+ '{
+   string-slot
+   parsed-slot browsed-slot string-sv-slot parsed-sv-slot paragraph-slot
+   active-radiobutton language-button
+   display-concept-values word-list
+   get-language get-languages get-logentry get-informant cgi-get slotvar
+   words->concepts set-morphfn!
+   javascript-refile get-slotid-base 
+   })
+
+

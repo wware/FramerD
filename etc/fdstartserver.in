@@ -1,0 +1,18 @@
+#!/bin/bash
+FDBINDIR=@prefix@/bin
+arg=$1
+cd $(dirname $1)
+name=$(basename $1 .fdz)
+if (test -x $name.server) then
+   executable=$name.server
+else
+   executable=${FDBINDIR}/fdserver
+fi
+stopname=${name}.stop
+logname=${name}.log
+rm -f ${stopname}
+shift 1
+ARGS=$*
+while (test ! -f ${stopname})
+ do ${executable} ${arg} ${ARGS} >> ${logname} 2>&1; sleep 5
+done

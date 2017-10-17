@@ -1,0 +1,195 @@
+New in FramerD 2.6
+
+* Numerous bug fixes and expanded error handling
+* Added new kind of file index which scales better to multi-million
+  key file indices and is based on multiplicative hashing
+* General improvements to FDSCRIPT module system
+* Defined more core primitive inference procedures especially around
+  structured (assoc/pair) slots
+* Added generic facility for file/module reloading
+* Various frame operation  optimizations
+* Added new primitives for accessing serial ports (including USB serial ports)
+* Numerous fixes and additions to arithmetic functions in FDScript
+* Improvements to index caching performance
+* Added compound indices which combine multiple indices with a shared cache.
+* Added subservers on index servers, allowing a server to provide
+  several distinct index tables
+* Provided C API access to ints and strings in config files
+* New, simpler command line parsing API
+* Use long longs as OIDs if possible
+* Added support for largefiles (> 2GB) for pools and indices
+* Added synchronization for pools and indices
+* Use file memory mapping for file pools and indices for dramatically
+  improved performance in many cases;
+* Further optimiziations to choice/set handling
+* Added "schema slotmaps" to reduce memory footprint for homogenous databases
+* Extensions to support extensive malloc debugging
+* Introduced interned ZSTRINGS as a core data type
+* Extended the frame data model by adding *adjuncts* which allow
+  index mappings to specify particular slots of for particular pools.
+* Separated out get-methods and compute-methods
+* Different pools and indices on the same server now get their own
+  network connection
+* Added finer grained locks for pool and index access to improve SMP
+  performance.
+* Optimized index retrieval to return sorted choices
+* Added tools to manage malformed UTF-8 text (important for DMOZ integration)
+* Improved ability to preload indices to improve performance
+* Fixes to HTML/XML integration with special attention to XML
+* Fix mime parsing with BASE64 encoding
+* Added tools for parsing structured (tab, space, etc) plaintext
+* Separated out the FDTEXT and FDWWW libraries
+* Made FDXML actually be usable and added callout models to have FDXML
+  call Scheme to generate content.
+
+
+New in FramerD 2.4
+
+This is the first stable release of FramerD since development moved
+from MIT to beingmeta.  It includes numerous bug fixes and exhaustive
+memory testing (with Parasoft's Insure++ product).
+
+Extensive work was done to find bugs in multithreaded behavior and we
+(at beingmeta) now routinely take advantage of SMP hardware to improve
+throughput of FDScript programs.  There have also been substantial
+performance improvements in both set/choice operations and in the
+provision of primitives for prefetching objects and sets of index
+entries.
+
+This release also provides additional documentation including a full
+set of man pages.
+
+Two major new components of this release are fdmanager, a program for
+managing multiple fdservers and mod_fdserv, an Apache module for
+maintaining persistent multi-threaded servlets, written in FDscript or
+FDXML, for responding to document requests.
+
+New in FramerD 2.2
+
+* substantially improved memory performance
+* optimized set/choice operations permitting log or linear time
+  operations in most cases
+* robust and efficient utilization of multiple processors on SMP
+  (symmetric multi processing) architectures
+* better integration with Apache for dynamic generation
+  of web pages with the fdcgi and fdxml executables
+* improved mime parsing with handling of Unicode data in
+  headers
+* plugin architectures for adding new kinds of pools and indices
+* extended subjob and networking socket support (subjob support
+  remains incomplete under WIN32)
+* builtin MIME, XML, and HTML parsers for dealing with external
+  textual data
+* extension of character operations to full Unicode and provisions for
+  interpreting compound Unicode characters
+
+New in FramerD 2.1
+
+New memory allocation model which both saves space and time and
+allows for per-thread free lists, speeding up multi-threaded programming.
+
+Numerous changes to make multi-threaded and SMP programming more robust.
+
+Optimization of choice types for space and time, allowing especially
+compact representation of homogenous choices and especially fast set
+operations when homogeous types are atomic (e.g. fixnums, symbols,
+OIDs).
+
+New indexing model allows the specification of `expanders' for
+particular slots.  This is a more general way of customizing indexing
+and searching behaviour.
+
+New text primitive MORPHRULE for defining more general morphological
+processors than SUFFIXRULE.
+
+New implementation of SLOTMAP datatype allows for shared frame
+schemas, to permit more compact object representations.
+
+New, simpler, XML/HTML parser.  Support for unparsing generic XML back
+into text documents.  New executable FDXML generates HTML or XML from
+a source document (in XML) with programmatic inclusions.
+
+Apache module mod_fdcgi (based on mod_fastcgi) provides for persistent
+CGI servers implicitly created based on fdcgi scripts or fdxml documents.
+
+New in FramerD 2.0
+
+Internal Unicode support is much more pervasive and robust and a large
+number of external character encodings is supported, in addition to
+the ability to read Unicode Consortium "mapping" files to get more.
+In addition, the character properties (upper, lower, digit, etc) have
+now been extended to all of the Unicode BMP (Basic Multilingual
+Plane).
+
+A new init/configuration file interface makes it much easier to
+customize FramerD at your site or for your personal use.  Config files
+can now specify additions to (rather than just assignments for) global
+variables.  You can either load config files by hand using
+LOAD-CONFIG, or specify them on the command line with --config=file.
+
+FramerD database (pool) servers can now serve multiple pools at the
+same time.  Unlike the facility in FramerD 0.9, these pools do not
+need to be contiguous. In addition, some fdserver security holes were
+fixed.
+
+Many optimizations for handling of non-deterministic values (now
+called `choices') have been added.  In particular, "sorted choices"
+are now supported which allow for linear time set operations.  In
+addition, fixed several complicated bugs having to do with shared
+pointers to choices and side-effects.
+
+Repacking utilities (repack-file-index and repack-file-pool) have been
+made into their own separate binaries and sped up tremendously by
+intelligently scheduling disk accesses.
+
+The system now relies on POSIX flock rather than it's own locking
+(which tended to leave lock files lying around).  This also means that
+(currently) WIN32 FramerD does not support file locking (I can't get
+the LockFile function to do the right thing), but just bludgeons ahead
+without it.  This will be fixed before 2.0 leaves BETA.
+
+New global variables %BACKGROUND, %FOREGROUND, and %POOL are used by
+several built in primitives as defaults for searching indices, adding
+new index entries, and creating new frames (OIDs).
+
+Test suites for client/server interaction have been written (and
+passed).  This led to a number of bug fixes and a fair bit of
+prophylactic programming.  The knowledge base construction & access
+test suite now runs with either file pools or network pools.
+
+Server journalling has been TAKEN OUT because it didn't work very
+well.  Instead, each "side-effecting" transaction with a server now
+saves all of the server's unsaved state; the server API has been
+extended to allow "bulk commits" saving many OIDs in a single
+transaction.  This addresses some of the overhead/performance issues
+which journalling was introduced to deal with.
+
+There is a new regular expression matching, extraction, and rewrite
+facility which uses LISP structures as patterns, making them more
+readable and manipulable.  In particular, it allows sub patterns to be
+defined symbolically, permitting complex patterns to be broken into
+understandable elements.  This is an effort to make regular
+expressions less of a "write-only" programming medium.
+
+Numerous fixes have been made to GET-REFPOINTS, which heuristically
+extracts proper names from strings.  A corresponding procedure
+GET-TIMEPOINTS attempts to extract time references.
+
+The XML/HTML parser has had various bugs fixed.  A MIME parser has
+been added which generates slotmaps (or lists of slotmaps) from
+MIME-formatted messages.  The URLSTRING procedure now parses the
+retrieved document as a MIME entity; the URLGET procedure actually
+returns the slotmaps generated (with all the attached HTTP headers as
+slots).
+
+A new procedure SUFFIXRULE has been introduced for writing simple
+morphological analyzers.  The Porter stemmer is still built in, but
+SUFFIXRULE should help with text analysis of languages besides
+English.
+
+HTML generation and CGI interpretation have had numerous fixes to
+allow international character data to be transmitted and received.  In
+addition, a new set of primitives for dynamically generating forms
+makes CGI interfaces much easier to write.
+
+

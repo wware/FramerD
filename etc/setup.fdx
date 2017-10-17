@@ -1,0 +1,131 @@
+#!/usr/bin/fdscript
+
+(unless (bound? installed-files)
+  (set! just-setup #t)
+  (set! installed-files '()))
+(unless (bound? target) (set! target #f))
+(unless (bound? win32p)
+  (set! win32p (search "win32" (get-osid))))
+(define oid-difference (eval 'oid-difference fdinternals))
+
+(define (destdir file)
+  (if (getenv "DESTDIR")
+      (string-append (getenv "DESTDIR") file)
+      file))
+
+(define (mkdir-if-needed dirspec)
+  (let ((dir (fullname dirspec)))
+    (unless (file-exists? dir)
+      (lineout ">>> Making directory " dir)
+      (mkdir dir)
+      ;; Root may make directories with weird permissions
+      (unless win32p (system "chmod a+rx " dir)))
+    (set! installed-files
+	  (cons (list 'directory dir) installed-files))))
+
+(define just-setup #f)
+(session-id) ;; Call it now to force it to be resolved and avoid later kludge
+(cond ((bound? framerd-lib))
+      ((> nargs 0) (set! framerd-lib arg1))
+      (else (set! framerd-lib (dirname (get-config-file)))
+	    (mkdir-if-needed (destdir framerd-lib))
+	    (lineout ">>> Setup will use the directory " framerd-lib)))
+
+;;; Set up the super pool
+(begin
+  (cond ((file-exists? (stringout framerd-lib "/super-pool"))
+	 (lineout ">>> A default super pool already exists")
+	 (set! super-pool (stringout framerd-lib "/super-pool")))
+	(else
+	 (make-super-pool (stringout framerd-lib "/super-pool"))
+	 (set! installed-files
+	       (cons (stringout framerd-lib "/super-pool") installed-files))
+	 (unless win32p
+	   (system "chmod a+w "  framerd-lib "/super-pool"))
+	 (lineout ">>> A default super pool has been created")
+	 (set! super-pool (stringout framerd-lib "/super-pool"))))
+  (lineout ">>>     Location: " (fullname super-pool))
+  (lineout ">>>         Base: " (super-pool-base super-pool))
+  (lineout ">>>    Allocated: " (oid-difference
+				 (super-pool-top super-pool)
+				 (super-pool-base super-pool))
+	   " oids")
+  (lineout ">>>   Registered: "
+    (if (registered-super-pool? super-pool) "yes" "no"))
+  (unless (registered-super-pool? super-pool)
+    (lineout "!! This pool is a private one.  If you plan on ")
+    (lineout "!! creating externally accesible databases in it, ")
+    (lineout "!! please register it with the command line command ")
+    (lineout "!!   register-super-pool " (fullname super-pool) " <email>")))
+
+;;; Updating windows registry
+
+(when win32p
+  (lineout ">>> Setting registry keys")
+  (when (signals-error?
+	 (begin
+	  (registry-create-machine-key! "Software\\FramerD\\environment")
+	  (lineout "Setup machine key 'Software\\FramerD\\environment'")))
+    (registry-create-user-key! "Software\\FramerD\\environment")
+    (lineout "!!! Couldn't set up local machine key, set up user key instead"))
+  (registry-set! "Software\\FramerD\\environment" "SUPER_POOL" super-pool)
+  (if target
+    (registry-set! "Software\\FramerD\\environment" "FRAMERD_ROOT" target))
+  (registry-set! "Software\\FramerD\\environment" "FRAMERD_LIB" framerd-lib)
+  (registry-set! "Software\\FramerD\\environment" "FRAMERD_CONFIG"
+		 (stringout framerd-lib "\\framerd.cfg")))
+
+
+;;; Writing out config file
+
+(define config-file (get-config-file))
+(mkdir-if-needed (destdir (dirname config-file)))
+(define config
+  (if (file-exists? (destdir config-file))
+      (let* ((file (open-input-file (destdir config-file)))
+	     (forms '())
+	     (form (read file)))
+	(until (eof-object? form)
+	  (set! forms (cons form forms))
+	  (set! form (read file)))
+	(reverse forms))
+    '()))
+(define (config-default! var value)
+  (unless (assoc var config)
+    (set! config (cons (list var (qc value)) config))))
+(define (config-define! var value)
+  (let ((pair (assoc var config)))
+    (if pair (set-cdr! pair (list value))
+      (set! config (cons (list var (qc value)) config)))))
+
+(config-default! '%fdpath
+		 (list (stringout framerd-lib "/lib/")
+		       (stringout framerd-lib "/modules/")))
+(config-default! '%translations (stringout framerd-lib "/translations/"))
+(when (directory? "/usr/share/i18n/charmaps")
+(config-default! '%pools (qc))
+(config-define! 'encodings_path "/usr/share/i18n/charmaps"))
+;(config-default! 'brico "brico@framerd.org")
+;(config-default! '%background 'brico)
+(config-default! 'super_pool super-pool)
+(config-define! 'framerd_lib framerd-lib)
+(config-define! 'installation (iso-timestring))
+(if target (config-define! 'install_root target))
+;(config-define! 'fact '(autoload "fact.fdx"))
+;(config-define! 'get-synonyms
+;		 '(use-server "brico@behemoth.media.mit.edu"))
+
+(when (file-exists? (destdir config-file))
+  (rename-file (destdir config-file) (destdir (string-append config-file ".bak"))))
+(call-with-output-file (destdir config-file)
+  (lambda (port)
+    (dolist (conf config) (pprint conf port) (newline port))))
+(set! installed-files (cons config-file installed-files))
+(unless win32p
+  (system "chmod go-w " (destdir config-file)))
+(lineout ">>> Wrote out FramerD configuration into " (destdir config-file))
+(unless (file-exists? (destdir (stringout framerd-lib "/servers")))
+  (call-with-output-file (destdir (stringout framerd-lib "/servers"))
+    (lambda (port) #f)))
+
+

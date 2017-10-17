@@ -1,0 +1,15 @@
+#!@prefix@/bin/fdscript
+;; -*- Mode: fdscript; -*-
+
+;;; $Id: fd_drop.in,v 1.2 2002/04/02 21:43:06 haase Exp $
+
+(use-module 'fdshell)
+
+(define (main)
+  (drop! (fdsh-arg arg1) (fdsh-arg arg2 #t) (fdsh-arg arg3)))
+
+
+;;; $Log: fd_drop.in,v $
+;;; Revision 1.2  2002/04/02 21:43:06  haase
+;;; Added Id and log entries to scripts
+;;;

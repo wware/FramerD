@@ -1,0 +1,660 @@
+;;; -*- Mode: fdscript; Text-encoding: latin-1; -*-
+
+(in-module 'fdxml/brico)
+
+(use-module
+ '{fdxml fdxml/edit brico htmlgen xmlgen fdtext fdwww fdinternals})
+
+(use-brico)
+
+;; Language related exports
+(module-export!
+ '{languagebox languagesbox getlanguages getlanguage get-languages get-language
+   get-browse-language output-words})
+
+;; Displaying words with language subscripts
+(module-export! '{wordform})
+
+;; Displaying concepts in various ways
+(module-export! '{showconcepts showconcept showwords concept-string showlattice})
+
+;; SPIDERs: Dialogues for browsing concept spaces
+(module-export! '{spider interpret-text-cue get-unique-concepts get-unknown-cues
+		  get-spider-constraints})
+
+;;;; Getting language information
+
+(define all-languages (?? 'type 'language))
+(define default-languages
+  (map (lambda (x) (?? 'langid x)) '(en es nl pt fi fr de it)))
+(define default-language (?? 'langid 'en))
+
+(define (lookup-langid langid)
+  (try (if (string? langid) (?? 'langid (intern langid)) (fail))
+       (?? 'langid langid)
+       (?? 'langid (string-downcase langid))
+       (?? 'langid (subseq langid 0 2))
+       (?? 'langid (string-downcase (subseq langid 0 2)))))
+
+(define (remove-duplicates lst)
+  (if (null? lst) '()
+      (if (member? (car lst) (cdr lst)) (remove-duplicates (cdr lst))
+	  (cons (car lst) (remove-duplicates (cdr lst))))))
+
+(define (get-preferred-languages reqdata)
+  (try (if (exists? (get reqdata 'accepted-languages))
+	   ;; If the have one or zero languages accepted,
+	   ;; add in the defaults just for flash value
+	   (let* ((ordered-prefs (sortby cdr (elts (get reqdata 'accepted-languages))))
+		  (langs (remove-duplicates
+			  (map lookup-langid (map car (vector->list (reverse ordered-prefs)))))))
+	     (if (< (length (get reqdata 'accepted-languages)) 3)
+		 (append langs (choice->list (difference (elts default-languages) (elts langs))))
+	       langs))
+	 default-languages)     
+       default-languages))
+
+(define (get-languages var)
+  (try (qget var) (elts (get-preferred-languages (cgi-data)))))
+(define (get-language var)
+  (try (qget var) (car (get-preferred-languages (cgi-data)))))
+
+(define (display-checkbox reqdata var val selected onclick multi)
+  (if onclick
+      (xmltag 'input 'type (if multi 'checkbox 'radio) 'name var 'value val
+	      'onclick onclick (if selected " CHECKED" ""))
+    (xmltag 'input 'type (if multi 'checkbox 'radio) 'name var 'value val
+	    (if selected " CHECKED" ""))))
+
+(define (get-language-name language) (get language '%id))
+
+;; This is used to figure out the language without displaying an option box
+(define (getlanguage id)
+  (let* ((var (getsym id))
+	 (preferred (get-preferred-languages (cgi-data)))
+	 (languages (try (qget var #t) (car preferred))))
+    languages))
+(define (getlanguages id)
+  (let* ((var (getsym id))
+	 (preferred (get-preferred-languages (cgi-data)))
+	 (languages (try (qget var #t) (elts preferred))))
+    languages))
+;; This is to be used in browse URI generation
+(define (get-browse-language f)
+  (let* ((var 'language)
+	 (preferred (get-preferred-languages (cgi-data)))
+	 (languages (try (qget var #t) (car preferred))))
+    languages))
+;; This is used to figure out the language and displaying an option box
+(define (languagebox id %env (onchange #f) (action #f) (selectbox #t)
+		     (title #f))
+  (let* ((var (getsym id))
+	 (preferred (get-preferred-languages (cgi-data)))
+	 (language (try (qget var #t) (car preferred))))
+    (if (and (fail? (qget var #t)) (= (length preferred) 1) (not selectbox))
+	(xmlout)
+      (xmlout
+       (span (class "langbox_title")
+	 (if (string? title) (xmlout title ":")
+	   (if title (xmleval title %env) (xmlout))))
+       (span (class (if (> (length preferred) 3) "langbox" "langbox_rigid"))
+	 (dolist (lang preferred)
+	   (span (class "nobreak")
+	     (display-checkbox (cgi-data) var lang
+			       (eq? lang language) onchange #f)
+	     (span (class "language") (get-language-name lang)))
+	   (xmlout "  "))
+	 (unless (member? language preferred)
+	   (span (class "nobreak")
+	     (display-checkbox (cgi-data) var language #t
+			       onchange #f)
+	     (span (class "language") (get-language-name language))))
+	 (when (true-string? selectbox)
+	   (selection (name var)
+		      (option {} "")
+		      (doseq (l (sortby get-language-name all-languages))
+			(option l (get-language-name l)))))
+	 (if action (xmltag 'input 'type 'submit 'name 'action 'value
+			    action)))))
+    language))
+(define (languagesbox id (onchange #f) (action #f) (selectbox #t) (multiple #t))
+  (let* ((var (getsym id))
+	 (preferred (get-preferred-languages (cgi-data)))
+	 (languages (try (qget var #t) (car preferred))))
+    (if (and (fail? (qget var #t)) (= (length preferred) 1) (not selectbox)) (xmlout)
+      (span (class (if (> (choice-size languages) 3) "langbox" "langbox_rigid"))
+	(dolist (lang preferred)
+	  (span (class "nobreak")
+	    (display-checkbox
+	     (cgi-data) var lang (contains? lang languages) onchange #t)
+	    (span (class "language") (get-language-name lang)))
+	  (xmlout "  "))
+	(do-choices (language languages)
+	  (unless (member? language preferred)
+	    (span (class "nobreak")
+	      (display-checkbox
+	       (cgi-data) var language (contains? language languages) onchange #t)
+	      (span (class "language") (get-language-name language)))
+	    (xmlout "  ")))
+	(when (true-string? selectbox)
+	  (selection (name var)
+		     (doseq (l (sortby get-language-name all-languages))
+		       (option l (get-language-name l)))))
+	(if action (xmltag 'input 'type 'submit 'name 'action 'value
+			   action))))
+    languages))
+
+(define (languagedropbox id (languages #f) (onchange #f) (action #f) (selectbox #t))
+  (let* ((var (getsym id))
+	 (languages (if (and (exists? languages) languages)
+			(if (sequence? languages) languages (sorted languages))
+		      (get-preferred-languages (cgi-data))))
+	 (language (try (qget var #t) (car languages))))
+    (selection (name var)
+       (option language (get-language-name language))
+       (doseq (l languages)
+	 (unless (eq? l language) (option l (get-language-name l)))))
+    language))
+(module-export! 'languagedropbox)
+
+;;;; Displaying words
+
+(define (get-languages-for word concepts)
+  (choice (if (test concepts 'words word) @?english {})
+	  (find-frames brico-index
+	    'type 'language
+	    'key
+	    (for-choices (translation (get concepts
+					   'translations))
+	      (if (equal? word (cadr translation))
+		  (car translation)
+		(fail))))))
+(define (display-langids word frame)
+  (let ((langids (get-langids word (qc frame))))
+    (cond ((empty? langids) (sub* (class "langids") "?"))
+	  ((= (choice-size langids) 1) (sub* (class "langids") langids))
+	  (else
+	   (sub* (class "langids")
+		 (doseq (elt (sorted langids) i)
+		   (if (= i 0) (xmlout elt) (xmlout ";" elt))))))))
+(define (get-langname lang)
+  (pick-one (get lang 'english-names)))
+(define (display-langids word frame)
+  (let ((languages (get-languages-for word (qc frame))))
+    (cond ((empty? languages) (sub* (class "langids") "?"))
+	  ((= (choice-size languages) 1)
+	   (sub* (class "langids" title (get-langname languages))
+		 (get languages 'iso639/1)))
+	  (else
+	   (sub* (class "langids")
+		 (doseq (elt (sortby 'iso639/1 languages) i)
+		   (if (= i 0)
+		       (span (title (get-langname elt))
+			 (get elt 'iso639/1))
+		     (xmlout ";" (span (title (get-langname elt))
+				   (get elt 'iso639/1))))))))))
+
+(define (possibly-quoted word)
+  (if (find #\Space word)
+      (xmlout "\"" word "\"")
+    word))
+
+(define (wordform word (concept #f) (search #f))
+  (if search
+      (anchor (stringout search "?WORDS=" word)
+	      (if concept (span (class "wordform")
+			    (possibly-quoted word)
+			    (display-langids word (qc concept)))
+		(span (class "wordform") (possibly-quoted word))))
+    (if concept (span (class "wordform")
+		  (possibly-quoted word)
+		  (display-langids word (qc concept)))
+      (span (class "wordform") (possibly-quoted word)))))
+
+(define (printout-wordform word (concept #f))
+  (if concept 
+      (let ((langids (get-langids word (qc concept))))
+	(cond ((empty? langids) (printout word))
+	      ((= (choice-size langids) 1) (printout word "(" langids ")"))
+	      (else
+	       (printout word "("
+			 (doseq (elt (sorted langids) i)
+			   (if (= i 0) (printout elt) (printout ";" elt)))
+			 ")"))))))
+
+;;;; Looking up words from concepts
+
+(define-if-needed morphfn #f)
+
+(define (set-morphfn! f) (set! morphfn f))
+(module-export! 'set-morphfn!)
+
+(define (stxstring string) (choice string (stdstring string)))
+
+(define (lookup-word word languages)
+  ;; (xmlout "word=" word "; languages=" languages "; morphfn=" morphfn)
+  (if morphfn
+      (choice (?? languages (stxstring word))
+	      (pick (?? languages (stxstring (morphfn word 'noun (get languages 'iso639/1))))
+		'type 'noun)
+	      (pick (?? languages (stxstring (morphfn word 'verb (get languages 'iso639/1))))
+		'type 'verb))
+      (?? languages (stxstring word))))
+(module-export! 'lookup-word)
+
+(define (spider-test-constraint constraint object)
+  (let ((result (if (pair? constraint)
+		    (test object (car constraint) (cadr constraint))
+		  (exists? (get object constraint)))))
+    result))
+(define (spider-test-constraints constraints object)
+  (not (satisfied? (not (spider-test-constraint constraints object)))))
+(module-export! 'spider-test-constraints)
+
+(define (lookup-entry entry language constraints)
+  (if (find #\: entry)
+      (let ((split (segment entry ":")))
+	(let ((constraint (lookup-word (second split) language)))
+	  (if (fail? constraint) (lookup-word (first split) language)
+	    (filter-choices (candidate (lookup-word (first split) language))
+	      (exists? (intersection constraint (get* candidate genls)))
+	      (spider-test-constraints (qc constraints) candidate)))))
+    (filter-choices (candidate (lookup-word entry language))
+      (spider-test-constraints (qc constraints) candidate))))
+
+(define (interpret-text-cue cue language constraints)
+  (let ((entries (string-trim (elts (segment cue ";")))))
+    (if (singleton? entries)
+	(try (lookup-entry entries (qc language) (qc constraints))
+	     (for-choices
+		 (entry (string-trim (elts (segment entries " "))))
+	       (lookup-entry entry (qc language) (qc constraints))))
+	(for-choices (entry entries)
+	  (lookup-entry entry (qc language) (qc constraints))))))
+(define (get-unique-concepts cue language constraints)
+  (let ((entries (string-trim (elts (segment cue ";")))))
+    (for-choices (entry entries)
+      (singleton (lookup-entry entry (qc language) (qc constraints))))))
+(define (get-unknown-cues cue language constraints)
+  (let ((entries (string-trim (elts (segment cue ";")))))
+    (filter-choices (entry entries)
+      (fail? (lookup-entry entry (qc language) (qc constraints))))))
+
+;;;; SPIDERs: concept browsing editors
+
+(define (mkidstring var role . args)
+  (intern
+   (if (null? args)
+       (stringout var "_" role)
+     (let ((oid (car args)))
+       (stringout var "_"  role "_" (oid-addr-high oid) "/" (oid-addr-low oid))))))
+
+(define (concept-checkbox var c onclick checked)
+  (if checked
+      (if onclick
+	  (xmltag 'input 'type 'checkbox 'class "conceptcheck"
+		  'name var 'value c 'onclick onclick "checked")
+	(xmltag 'input 'type 'checkbox 'class "conceptcheck"
+		'name var 'value c "checked"))
+    (if onclick
+	(xmltag 'input 'type 'checkbox 'class "conceptcheck"
+		'name var 'value c 'onclick onclick)
+      (xmltag 'input 'type 'checkbox 'class "conceptcheck"
+	      'name var 'value c))))
+(define (tiny-concept-checkbox var c onclick checked)
+  (if checked
+      (if onclick
+	  (xmltag 'input 'type 'checkbox 'class "tinyconceptcheck"
+		  'name var 'value c 'onclick onclick "checked")
+	(xmltag 'input 'type 'checkbox 'class "tinyconceptcheck"
+		'name var 'value c "checked"))
+    (if onclick
+	(xmltag 'input 'type 'checkbox 'class "tinyconceptcheck"
+		'name var 'value c 'onclick onclick)
+      (xmltag 'input 'type 'checkbox 'class "tinyconceptcheck"
+	      'name var 'value c))))
+(define (sensecat->css tag)
+  (string-subst (symbol->string tag) "." "_"))
+(define (concept-anchor f . args)
+  (let ((languages (car args)))
+    (if (exists? (get f 'sense-category))
+	(span (class (cachecall sensecat->css (get f 'sense-category)))
+	  (anchor+ f (class "conceptref" title (string-trim (pick-one (get-gloss f languages))))
+		   (output-words f (qc languages) 2)))
+	(anchor+ f (class "conceptref" title (string-trim (pick-one (get-gloss f languages))))
+		 (output-words f (qc languages) 2)))))
+
+(define (display-concept expansions var c language uplink onclick checked)
+  ;; Display concepts and genzns
+  (let* ((expand-var (mkidstring var 'EXPANDED))
+	 (expand-id (mkidstring var 'EXPANDED c))
+	 (language-var (mkidstring var 'LANG))
+	 (downlink (get uplink inverse))
+	 (details-id (and expansions (exists? (get c downlink))
+			  (mkidstring var "DETAILS" c)))
+	 (expand-click-method
+	  (stringout "toggle_detail\(this,'" expand-id "','"
+		     details-id "')"))
+	 (expanded-p (contains? c expansions))
+	 (gloss (get-gloss c language)))
+    (div (class "conceptbox")
+      (div (class "conceptblock")
+	(span (class "controls")
+	  (when details-id
+	    ;; This is an invisible checkbox which passes expansion information
+	    (xmltag 'input 'type 'checkbox 'name expand-var 'value c
+		    'id expand-id 'style "position: absolute; visibility:hidden;"
+		    (if expanded-p "CHECKED" ""))
+	    ;; This is the control itself
+	    (xmltag 'img 'src (if expanded-p "/graphics/expanded.gif" "/graphics/unexpanded.gif")
+		    'border 0 'title "click to expose/hide details"
+		    'onclick expand-click-method))
+	  (concept-checkbox var c onclick checked))
+	(span (class "concept") (concept-anchor c language))
+	(span (class "uplink")
+	  " «&nbsp;" (do-choices (g (get c uplink) i)
+		       (if (= i 0) (concept-anchor g language) 
+			 (xmlout "&nbsp;|&nbsp;" (concept-anchor g language)))))
+	(when (exists? gloss)
+	  (div (class "gloss")
+	    (when (exists? (get c 'sense-category))
+	      (span (class "sensecat") (get c 'sense-category) ": "))
+	    gloss)))
+      (when expansions
+	(div (class "details" id details-id style
+		    (if (contains? c expansions) "display:block;" "display: none;"))
+	  (when details-id
+	    (span (class "downlink")
+	      (strong "narrower&nbsp;")
+	      (let ((inferiors (get c downlink)))
+		(do-choices (s inferiors i)
+		  (span (class "nobreak")
+		    (tiny-concept-checkbox var s onclick #f) "&nbsp;"
+		    (concept-anchor s language)))))
+	    (span (class "uplink")
+	      (when (exists? (get c uplink))
+		(strong " &nbsp;broader&nbsp;")
+		(do ((up (get c uplink) (get up uplink)))
+		    ((empty? up) (br))
+		  (do-choices (u up)
+		    (xmlout (tiny-concept-checkbox var u onclick #f)
+			    (concept-anchor u language))))))))))))
+
+(define (concept-browser var env
+			 prompt postprompt novals language
+			 action uplink onclick constraints)
+  (let* ((var-id (intern var))
+	 (cue-id (mkidstring var "CUE"))
+	 (lang-id (mkidstring var "LANG"))
+	 (valstring (get (cgi-data) var-id))
+	 (vals (if (pair? valstring) (read-var (elts valstring))
+		 (if (string? valstring) (read-var valstring)
+		   valstring)))
+	 (lang (try (get-language lang-id) (get-language 'language)))
+	 (expansions
+	  (choice (if (or (pair? valstring) (string? valstring))
+		      (difference vals (qget (mkidstring var 'prev)))
+		    (fail))
+		  (qget (mkidstring var 'expanded)))))
+    ;; (xmlout "lang=" lang)
+    (div (class "spider")
+      (cgipass (mkidstring var "PREV") vals)
+      (let* ((cue-string (get (cgi-data) cue-id))
+	     (possibilities (interpret-text-cue cue-string lang (qc constraints)))
+	     (unique (get-unique-concepts cue-string lang (qc constraints)))
+	     (unrecognized (get-unknown-cues cue-string lang (qc constraints))))
+	(set+! vals unique)
+	(when (empty? vals)
+	  (if (null? novals) (xmlout)
+	      (if novals (xmleval novals env)
+		  (div (class "novals") "No current values"))))
+	(unless (empty? vals)
+	  (doseq (c (sorted vals))
+	    (if (exists? (get c 'sense-category))
+		(div (class (cachecall sensecat->css (get c 'sense-category)))
+		  (display-concept (qc (try expansions #t)) var-id c lang uplink onclick #t))
+		(display-concept (qc (try expansions #t)) var-id c lang uplink onclick #t))))
+	(div (class "textcue")
+	  (when (exists? unrecognized)
+	    (span (class "unrecognized")
+	      "Unrecognized: " (do-choices (phrase unrecognized)
+				 (xmlout (span (class "phrase")
+					   phrase) " ")))
+	    (br))
+	  (if prompt
+	      (if (string? prompt)
+		  (span (class "inline_prompt") prompt)
+		  (unparse-xml prompt env))
+	      (span (class "inline_prompt") "Find concepts: "))
+	  (textfield cue-id 40 (try (get (cgi-data) cue-id) ""))
+	  (xmltag 'input 'type 'submit 'name 'action 'value "*" 'title
+		  "Refresh")
+	  (if postprompt
+	      (if (string? postprompt)
+		  (span (class "inline_postprompt") postprompt)
+		  (unparse-xml postprompt env))
+	      (span (class "inline_postprompt") "Enter keywords to find concepts"))
+	  (when action (submit 'action action)) (br)
+	  (unless language (languagebox lang-id onclick #f #f) (xmlout))
+	  (if action (xmltag 'input 'type 'submit 'name 'action 'value action)
+	    (xmlout)))
+	(doseq (c (reverse (sorted possibilities)))
+	  (unless (and (exists? vals) (contains? c vals))
+	    (if (exists? (get c 'sense-category))
+		(div (class (cachecall sensecat->css (get c 'sense-category)))
+		  (display-concept #f var-id c lang uplink onclick #f))
+	      (display-concept #f var-id c lang uplink onclick #f))))))
+    vals))
+
+(define (extract-slotval-pair elt env)
+  (let ((slotvar  (xml-get elt 'slotid))
+	(slotval (xmleval-arg elt 'value env)))
+    (if (empty? slotval) (read-var slotvar)
+      (list (read-var (xml-get elt 'slotid))
+	    (xmleval-arg elt 'value env)))))
+
+(define (get-spider-constraints xpr env)
+  (extract-slotval-pair (xml-get xpr 'constraint) env))
+(define (get-spider-prompt xpr env)
+  (xml-get xpr 'prompt))
+
+(define (spider id %env
+		(uplink @?genls) (onclick #f) 
+		(prompt #f) (postprompt #f) (language #f) (action #f)
+		(frame #f) (slotid #f) (submit #f)
+		. body)
+  (let ((constraints (get-spider-constraints body %env))
+	(novals (try (xml-get body 'novals) #f)))
+    (when (and frame slotid)
+      (let ((var-slotid (intern id))
+	    (submit-vars (if submit (string-trim (elts (segment submit "|"))) "Commit")))
+	(when (field-changed? frame slotid var-slotid "expr")
+	  (unless (writable? frame)
+	    (div (class "cant_edit")
+	      "The changes to this slot will have no effect!"))
+	  (when (test (cgi-data) 'action submit-vars)
+	    (when (writable? frame)
+	      (sync! frame (parse-arg slotid) (qc (convert-edit-arg var-slotid type)))
+	      (%set! (cgi-data) var-slotid (get frame (parse-arg slotid))))))
+	(if (test (cgi-data) 'action submit-vars)
+	    (begin
+	     (sync! frame (parse-arg slotid) (qc (convert-edit-arg var-slotid "expr")))
+	     (%set! (cgi-data) var-slotid (get frame (parse-arg slotid))))
+	  (when (fail? (get (cgi-data) var-slotid))
+	    (%set! (cgi-data) var-slotid (get frame (parse-arg
+						     slotid)))))))
+    (concept-browser id %env
+		     prompt postprompt novals language
+		     action uplink onclick (qc constraints))))
+(define (concept-editor id %env
+		(uplink @?genls) (onclick #f) 
+		(prompt #f) (postprompt #f) (language #f) (action #f)
+		(frame #f) (slotid #f) (submit #f)
+		. body)
+  (let ((constraints (get-spider-constraints body %env))
+	(novals (try (xml-get body 'novals) #f)))
+    (concept-browser id %env
+		     prompt postprompt novals language
+		     action uplink onclick (qc constraints))))
+(hashtable-set! edit-handlers "concept" concept-editor)
+
+(define (addwords frame id)
+  (let ((langvar (intern (stringout id "_LANG"))))
+    (xmltag 'input 'type 'text
+	    'name id 'size 40 'value (try (get (cgi-data) 'id) ""))
+    (languagedropbox langvar)))
+(module-export! 'addwords)
+
+;;; Displaying concepts
+
+(define (get-sorted-words concept language)
+  (try (if (eq? language @?english) (get concept 'ranked) (fail))
+       (sortby (lambda (x) (choice-size (?? language x)))
+	       (get concept language))))
+
+(define (output-words c languages wordlim)
+  (let ((the-first #t) (multi-lingual (> (choice-size languages) 1))
+	(shown {}))
+    (if (exists? (get c languages))
+	(do-choices (language languages)
+	  (let ((words (get-sorted-words c language)))
+	    (doseq (word words i)
+	      (cond ((contains? word shown))
+		    ((or (not wordlim) (= (length words) (1+ wordlim)))
+		     (if the-first (set! the-first #f) (xmlout " or "))
+		     (if multi-lingual (wordform word c)
+			 (span (class "wordform") word))
+		     (set+! shown word))
+		    ((= i wordlim)
+		     (xmlout " " (make-string (- (length words) i) #\.)))
+		    ((> i wordlim) (xmlout))
+		    (else 
+		     (if the-first (set! the-first #f) (xmlout " or "))
+		     (if multi-lingual (wordform word c)
+			 (span (class "wordform") word))
+		     (set+! shown word))))))
+      (let* ((words (try (get c 'words) (cdr (get c 'translations))))
+	     (two-words (sorted (pick-n words 2))))
+	(if (empty? words) (xmlout "?" (get c '%id) "?")
+	  (if (= (choice-size words) 1)
+	      (xmlout "?" words "?")
+	    (if (= (choice-size words) 2)
+		(xmlout "?" (elt two-words 0) " | " (elt two-words 1)
+			"?")
+	      (xmlout "?" (elt two-words 0) " | " (elt two-words 1)
+		      " |...?"))))))))
+
+(define (concept-string c (languages #f) (wordlim 2))
+  (let* ((languages (or languages (get-language 'language)))
+	 (the-first #t) (multi-lingual (> (choice-size languages) 1))
+	 (shown {}))
+    (if (exists? (get c languages))
+	(do-choices (language languages)
+	  (let ((words (get c language)))
+	    (do-choices (word (difference words shown) i)
+	      (cond ((or (not wordlim) (= (choice-size words) (1+ wordlim)))
+		     (if the-first (set! the-first #f) (printout " or "))
+		     (if multi-lingual (printout-wordform word c)
+			 (printout word))
+		     (set+! shown word))
+		    ((= i wordlim)
+		     (printout " " (make-string (- (choice-size words) i) #\.)))
+		    ((> i wordlim) (printout))
+		    (else 
+		     (if the-first (set! the-first #f) (printout " or "))
+		     (if multi-lingual (printout-wordform word c)
+			 (printout word))
+		     (set+! shown word))))))
+      (let* ((words (try (get c 'words) (cdr (get c 'translations))))
+	     (two-words (sorted (pick-n words 2))))
+	(if (empty? words) (printout "?" (get c '%id) "?")
+	  (if (= (choice-size words) 1)
+	      (printout "?" words "?")
+	    (if (= (choice-size words) 2)
+		(printout "?" (elt two-words 0) " | " (elt two-words 1)
+			"?")
+	      (printout "?" (elt two-words 0) " | " (elt two-words 1)
+			" |...?"))))))))
+
+(define (showwords c (language #f) (wordlim 2))
+  (let ((languages (or language (get-language 'language))))
+    (output-words c (qc languages) wordlim)))
+
+(define (showconcept c (language #f) (expansion #f) (wordlim 2))
+  (if (fail? c) (xmlout)
+    (let ((languages (or language (get-languages 'language)))
+	  (expval (if expansion (get c expansion) (fail))))
+      (anchor+ c (title (string-trim (get-gloss c (qc languages))) class "concept")
+	       (output-words c (qc languages) wordlim))
+      (when (exists? expval)
+	(span (style "cursor: help;"
+		     title
+		     "the concept to the right is more general than the concept to the left")
+	  " « "))
+      (do-choices (expval (get c expansion) i)
+	(if (> i 0) (xmlout " . "))
+	(if (frame? expval) (showconcept expval (qc language))
+	  (xmlout expval)))
+      (xmlout))))
+
+(define (showconcepts source (slotid #f) (showfn #f) (showpath #f)
+		      (sep #f) (pathsep " « "))
+  (let ((concepts (if slotid (get source slotid) source)))
+    (do-choices (concept concepts i)
+      (unless (= i 0)
+	(cond ((not sep) (br))
+	      ((procedure? sep) (sep concept))
+	      ((pair? sep) (unparse-xml sep))
+	      (else (xmlout sep))))
+      (if showfn (showfn concept) (showconcept concept))
+      (when showpath
+	(let ((seen (choices->hashset concept)))
+	  (do ((super (hashset-filter seen (get concept showpath))
+		      (hashset-filter seen (get super showpath))))
+	      ((fail? super))
+	    (do-choices (c super)
+	      (cond ((not pathsep) (xmlout " « "))
+		    ((procedure? pathsep) (pathsep concept))
+		    ((pair? pathsep) (unparse-xml pathsep))
+		    (else (xmlout pathsep)))
+	      (if showfn (showfn c) (showconcept c)))))))))
+
+
+(define (showlattice frame slotid)
+  (when  (exists? (get frame slotid))
+    (tr (th* (class "slotid") slotid)
+	(td* (class "lattice_up")
+	  (showconcepts (qc frame) slotid #f slotid))))
+  (when (exists? (get frame (get slotid inverse)))
+    (tr (th* (class "slotid")  (get slotid inverse))
+	(td* (class "lattice_down")
+	  (showconcepts (qc (get frame (get slotid inverse))))))))
+
+(define (get-gloss-slot language)
+  (pick (?? 'type 'gloss) 'language language))
+
+(define (conceptsummary concept (language #f) . body)
+  (let  ((language (or language (get-languages 'language))))
+    (DIV (class "conceptsummary")
+      (P* (class "head")
+	  (anchor concept "@" " ")
+	  (do-choices (word (get concept language) i)
+	    (if (> i 0) (xmlout " . "))
+	    (wordform word concept))
+	  (if (exists? (get concept 'sense-category))
+	      (xmlout " " (span (class "pos") (get concept 'sense-category)) " ")
+	    (if (exists? (get concept 'part-of-speech))
+		(xmlout " " (span (class "pos") (get concept 'part-of-speech)) " "))))
+      (P (strong "genl ")
+	 (do-choices (g (get concept genls) i)
+	   (if (> i 0) (xmlout " . ")) (showconcept g (qc language))))
+;      (do-choices (gloss (get concept (get-gloss-slot language)))
+;	(P* (class "gloss") gloss))
+      (when (exists? (get concept 'gloss)) (P* (class "gloss") (get concept 'gloss)))
+      (if (exists? (get concept 'source))
+	  (P (strong "source ") (get concept 'source)))
+      (unless (empty? (xml-content body)) (unparse-xml (xml-content body))))))
+
+(module-export! 'conceptsummary)
+
+

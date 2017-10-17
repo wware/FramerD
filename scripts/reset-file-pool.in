@@ -1,0 +1,26 @@
+#!@prefix@/bin/fdscript
+;; -*- Mode: fdscript; -*-
+
+;;; $Id: reset-file-pool.in,v 1.5 2002/04/02 21:43:06 haase Exp $
+
+(use-module 'fdmaint)
+(use-module 'fdinternals)
+
+(define (main . arglist)
+  (cond ((not (= nargs 2))
+	 (lineout "Usage: reset-file-pool <file pool>"))
+	((and (file-exists? arg1) (file-writable? arg1))
+	 (reset-file-pool arg1)
+	 (lineout "The file pool " arg1 " begins at " (pool-base arg1))
+	 (lineout "It has a capacity of " (pool-capacity arg1)
+		  " OIDs of which " (pool-load arg1)
+		  " have been allocated"))
+	((not (file-exists? arg1))
+	 (lineout "The file " arg1 " does not exist"))
+	(else
+	 (lineout "The file " arg1 " cannot be written"))))
+
+;;; $Log: reset-file-pool.in,v $
+;;; Revision 1.5  2002/04/02 21:43:06  haase
+;;; Added Id and log entries to scripts
+;;;

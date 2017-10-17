@@ -1,0 +1,93 @@
+(in-module 'fdxml)
+
+(define cgimodule
+  (if (or (signals-error? (get-module 'cgitools))
+	  (fail? (get-module 'cgitools)))
+      (begin (use-module 'fakecgi) (get-module 'fakecgi))
+    (begin (use-module 'cgitools) (get-module 'cgitools))))
+
+(use-module 'htmlgen)
+
+(module-export! '{cgimodule cgi-var cgi-init cgi-data showtime})
+
+(define (showtime)
+  (let ((rt (get (cgi-data) 'showtime))
+	(now (xtimestamp)))
+    (cond ((exists? rt)
+	   (xmlout "+" (timestamp-diff now (car rt)))
+	   (set-car! rt now))
+	  (else (xmlout "+0")
+		(%set! (cgi-data) 'showtime (cons now now))))
+    (xmlout)))
+	  
+
+(define (passvar var (val #f))
+  (let ((varid (intern var)))
+    (if val (cgipass varid val)
+      (when (exists? (get (cgi-data) varid))
+	(if (pair? (get (cgi-data) varid))
+	    (dolist (val (get (cgi-data) varid))
+	      (cgipass varid val))
+	  (cgipass varid (get (cgi-data) varid)))))))
+
+(define (qget arg1 (arg2 #t) (arg3 #t))
+  (let ((reqdata (if (symbol? arg1) (cgi-data) arg1))
+	(slotid (if (symbol? arg1) arg1 arg2))
+	(parser (if (symbol? arg1) arg2 arg3)))
+    (let ((value (get reqdata slotid)))
+      (cond ((pair? value)
+	     (if (not parser) (elts value)
+	       (if (applicable? parser) (parser (elts value))
+		 (parse-arg (elts value)))))
+	    ((not (string? value)) value)
+	    ((not parser) value)
+	    ((applicable? parser) (parser value))
+	    (else (parse-arg value))))))
+
+(define yes-answers
+  #("yes" "y" "true" "on" "1" "t" "#t" "yah" "yeah" "yep" "oui" "ja" "ei" "si"))
+(define no-answers
+  #("no" "n" "false" "off" "0" "#f" "f" "false" "no" "nope" "nah" "non" "nei" "nein" "nylla" "no"))
+
+(define (true-string? x (default #t))
+  (cond ((not (string? x)) x)
+	((find x yes-answers) #t)
+	((find x no-answers) #f)
+	(else default)))
+
+(define (getsym x)
+  (if (symbol? x) x
+    (if (string? x) (intern x)
+      (intern (stringout x)))))
+
+(define (symout . args)
+  (intern (apply string-append
+		 (map (lambda (x)
+			(if (string? x) x (write-to-string x)))
+		      args))))
+
+(define (read-var x)
+  (if (string? x) (read-from-string x)
+    (if (pair? x) (elts (map read-var x))
+      x)))
+
+(module-export! '{passvar qget true-string? getsym symout read-var})
+
+
+;;; Displaying frames
+
+(define (showcgi) (P (cgi-data)))
+(module-export! 'showcgi)
+
+(define (dframe source (visible #f) (label "dframe"))
+  (div (class "hiderevealbutton" onclick
+	      (stringout "toggle_visibility('" label "')"))
+    "Details")
+  (div (class "dframe" id label
+	      style (if visible "display: block;" "display: none;"))
+    (oid->html source)))
+(define (dslots source)
+  (slots->html source))
+(module-export! '{dframe dslots})
+
+

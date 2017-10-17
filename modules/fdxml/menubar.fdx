@@ -1,0 +1,236 @@
+(in-module 'fdxml/menubar 'fdxml)
+
+(use-module cgimodule)
+(use-module 'htmlgen)
+(use-module 'xmlgen)
+(use-module 'fdtext)
+(use-module 'fdwww)
+
+(module-export! '{action-button
+		  script-button
+		  expert-check
+		  help-check
+		  helptext
+		  make-menu-bar})
+
+;;; Defaults
+
+(unless (bound? appgraphic) (gset! appgraphic #f))
+(unless (bound? applogotype) (gset! applogotype "Application"))
+(unless (bound? applogotarget) (gset! applogotarget #f))
+(unless (bound? sitegraphic) (gset! sitegraphic #f))
+(unless (bound? sitelogotype) (gset! sitelogotype "Site"))
+(unless (bound? sitelogotarget) (gset! sitelogotarget #f))
+
+(define-if-needed experthelp
+    "click to en/disable expert mode, revealing additional structure
+and commands")
+(define-if-needed helphelp
+    "click to hide or reveal help text")
+
+;;;; Menu bars
+
+(define (action-button action title (text #f))
+  (cgi-var expert) (cgi-init keywords)
+  (anchor+ (stringout "javascript:do_submit('" action "');")
+	   (class "command_anchor" title title)
+	   (or text title)))
+(define (script-button script-text title (text #f))
+  (cgi-var expert) (cgi-init keywords)
+  (anchor+ (stringout "javascript:" script-text)
+	   (class "command_anchor" title title)
+	   (or text title)))
+
+(define (expert-check)
+  (span (class "expertcheck")
+    (if (exists? (get (cgi-data) 'expert))
+	(input class "expertcheck" type "checkbox"
+	       onchange "expertmode_changed();" id "expertbox"
+	       name 'expert title experthelp initial "on"
+	       "CHECKED")
+      (input class "expertcheck" type "checkbox"
+	     onchange "expertmode_changed();" id "expertbox"
+	     name 'expert title experthelp))
+    (span (title experthelp onclick "change_expertmode();")
+      "expert mode")))
+
+(define (help-check)
+  (span (class "helpcheck")
+    (span (title helphelp onclick "change_hidehelp();") "hide help")
+    (if (exists? (get (cgi-data) 'hidehelp))
+	(input class "helpcheck" type "checkbox" id "helpbox"
+	       onchange "hidehelp_changed();"
+	       name 'hidehelp title helphelp
+	       "CHECKED")
+      (input class "helpcheck" type "checkbox" id "helpbox"
+	     onchange "hidehelp_changed();"
+	     name 'hidehelp title helphelp))))
+
+(define (helptext %env (class "explanation") . body)
+  (div (class class name "help"
+	style (if (exists? (get (cgi-data) 'hidehelp))
+		  "display: none; clear: both;" "clear: both;"))
+    (xmleval (xml-content body) %env)))
+
+(define (make-menu-bar info . commands)
+  (let ((appgraphic (if info (try (get info 'appgraphic) appgraphic)
+		      appgraphic))
+	(applogotype (if info (try (get info 'applogotype) applogotype)
+		       applogotype))
+	(applogotarget (if info (try (get info 'applogotarget) applogotarget)
+			 applogotarget))
+	(sitegraphic (if info (try (get info 'sitegraphic) sitegraphic)
+		       sitegraphic))
+	(sitelogotype (if info (try (get info 'sitelogotype) sitelogotype)
+			sitelogotype))
+	(sitelogotarget (if info
+			    (try (get info 'sitelogotarget) sitelogotarget)
+			  sitelogotarget)))
+    (table* (class "menubar")
+      (tr* (class "top")
+	   (th* (class "applogo")
+	     (if applogotarget
+		 (anchor applogotarget
+			 (if appgraphic
+			     (img src appgraphic border 0
+				  alt applogotype class "logo")
+			   applogotype))
+	       (if appgraphic
+		   (img src appgraphic border 0
+			alt applogotype class "logo")
+		 applogotype)))
+	   (td* (class "buttons"))
+	   (th* (class "sitelogo")
+	     (if sitelogotarget
+		 (anchor sitelogotarget
+			 (if sitelogo
+			     (img src sitegraphic border 0
+				  alt sitelogotype class "logo")
+			   sitelogotype))
+	       (if sitegraphic
+		   (img src sitegraphic border 0
+			alt sitelogotype class "logo")
+		 sitelogotype))))
+      (tr* (class "bottom")
+	   (th* (class "applogo"))
+	   (td* (class "buttons")
+	     (do ((scan commands (cddr scan)))
+		 ((null? scan))
+	       (if (find ";" (car scan))
+		   (script-button (car scan) (cadr scan))
+		 (action-button (car scan) (cadr scan))))
+	     (expert-check-span))
+	   (th* (class "sitelogo"))))))
+
+(define (menubar %env . body)
+  (let ((appgraphic (try (xml-get body 'appgraphic) appgraphic))
+	(applogotype (try (xml-get body 'applogotype) applogotype))
+	(applogotarget (try (xml-get body 'applogotarget)
+			    applogotarget))
+	(sitegraphic (try (xml-get body 'sitegraphic) sitegraphic))
+	(sitelogotype (try (xml-get body 'sitelogotype) sitelogotype))
+	(sitelogotarget (try (xml-get body 'sitelogotarget) sitelogotarget))
+	(left-logo (xml-get body 'applogo))
+	(right-logo (xml-get body 'sitelogo))
+	(pagelogo (xml-get body 'pagelogo)))
+    (table* (class "menubar")
+      (tr* (class "top")
+	   (th* (class "applogo")
+	     (if (fail? left-logo)
+		 (if applogotarget
+		     (anchor applogotarget
+			     (if appgraphic
+				 (img src appgraphic border 0
+				      alt applogotype class "logo")
+			       applogotype))
+		   (if appgraphic
+		       (img src appgraphic border 0
+			    alt applogotype class "logo")
+		     applogotype))
+	       (xmleval left-logo %env)))
+	   (th* (class "pagelogo")
+	     (unless (fail? pagelogo)
+	       (if (string? pagelogo) (xmlout pagelogo)
+		 (xmleval pagelogo %env))))
+	   (th* (class "sitelogo")
+	     (if (fail? right-logo)
+		 (if sitelogotarget
+		     (anchor sitelogotarget
+			     (if sitegraphic
+				 (img src sitegraphic border 0
+				      alt sitelogotype class "logo")
+			       sitelogotype))
+		   (if sitegraphic
+		       (img src sitegraphic border 0
+			    alt sitelogotype class "logo")
+		     sitelogotype))
+	       (xmleval right-logo %env))))
+      (tr (th* (class "pagelogo")
+	    (if (exists? pagelogo)
+		(div (class "pagelogo")
+		  (if (string? pagelogo) (xmlout pagelogo)
+		    (xmleval pagelogo %env)))))
+	  (td* (class "buttons")
+	    (help-check)
+	    (dolist (elt (xml-content body))
+	      (cond ((string? elt) (xmlout elt))
+		    ((not (xmltag-match? 'item (xml-tag elt)))
+		     (xmleval elt %env))	
+		    ((exists? (xml-get elt 'script))
+		     (anchor+ (stringout "javascript:" (xml-get elt 'script))
+			      (class (try (xml-get elt 'class)
+					  "command_anchor")
+				     title (try (xml-get elt 'help) ""))
+			      (xmleval (xml-content elt) %env)))
+		    ((exists? (xml-get elt 'url))
+		     (anchor+ (xml-get elt 'url)
+			      (class "command_anchor"
+				     title (try (xml-get elt 'help) ""))
+			      (xmleval (xml-content elt) %env)))
+		    ((exists? (xml-get elt 'command))
+		     (anchor+ (stringout
+			       "javascript:submit_command('"
+			       (xml-get elt 'command)"');")
+			      (class "command_anchor"
+				     title (try (xml-get elt 'help) ""))
+			      (xmleval (xml-content elt) %env)))
+		    (else
+		     (anchor+ (stringout "javascript:submit_action('"
+					 (xml-get elt 'action )"');")
+			      (class "command_anchor"
+				     title (try (xml-get elt 'help) ""))
+			      (xmleval (xml-content elt) %env)))))
+	    (expert-check))
+	  (th* (class "sitelogo"))))))
+(module-export! 'menubar)
+
+(define (menubutton %env . elt)
+  (cond ((exists? (xml-get elt 'script))
+	 (anchor+ (stringout "javascript:" (xml-get elt 'script))
+		  (class "command_anchor"
+			 title
+			 (try (xml-get elt 'help)
+			      (string-append "Click to execute "
+					     (xml-get elt 'script))))
+		  (xmleval (xml-content elt) %env)))
+	((exists? (xml-get elt 'url))
+	 (anchor+ (xml-get elt 'url)
+		  (class "command_anchor"
+			 title (try (xml-get elt 'help)
+				    (string-append "Click to execute "
+						   (xml-get elt 'script))))
+		  (xmleval (xml-content elt) %env)))
+	((exists? (xml-get elt 'command))
+	 (anchor+ (stringout "javascript:submit_command('"
+			     (xml-get elt 'command)"');")
+		  (class "command_anchor"
+			 title (try (xml-get elt 'help) ""))
+		  (xmleval (xml-content elt) %env)))
+	(else
+	 (anchor+ (stringout "javascript:submit_action('"
+			     (xml-get elt 'action ) "');")
+		  (class "command_anchor"
+			 title (try (xml-get elt 'help) ""))
+		  (xmleval (xml-content elt) %env)))))
+(module-export! 'menubutton)
+

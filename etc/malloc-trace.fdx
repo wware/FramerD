@@ -1,0 +1,81 @@
+(in-module 'malloc-trace)
+
+(define blocks-in-use (make-hashtable))
+
+(define (hex n) (number->string n 16))
+
+(define (add-block! start end action pid time location)
+  (hashtable-set! blocks-in-use (cons start end) (list action pid time location))
+  (hashtable-set! blocks-in-use start (cons start end)))
+(define (drop-block! start end)
+  (hashtable-zap! blocks-in-use (cons start end))
+  (hashtable-zap! blocks-in-use (get blocks-in-use start))
+  (hashtable-zap! blocks-in-use start))
+
+(define (disjoint? block1 block2)
+  (if (or (null? (cdr block1))  (null? (cdr block2)))
+      (if (and (null? (cdr block1))  (null? (cdr block2))) (= (car block1) (car block2))
+	(multiple-value-bind (full partial)
+	    (if (null? (cdr block1)) (values block2 block1) (values block1 block2))
+	  (if (and (>= (car partial) (car full)) (< (car partial) (cdr full))) #f #t)))
+    (not (or (and (>= (car block1) (car block2)) (< (car block1) (cdr block2)))
+	     (and (>= (cdr block1) (car block2)) (< (cdr block1) (cdr block2)))
+	     (and (> (cdr block1) (cdr block2)) (< (car block1) (car block2)))
+	     (and (> (cdr block2) (cdr block1)) (< (car block2) (car block1)))))))
+
+(define (handle-block start end pid time action location)
+  (cond ((or (equal? action "fd_malloc")  (equal? action "fd_xmalloc")
+	     (equal? action "fd_realloc (new)") (equal? action "fd_xrealloc (new)"))
+	 (let ((this-block (cons start end)))
+	   (dolist (pair (hashtable->alist blocks-in-use))
+	     (when (pair? (car pair))
+	       (unless  (disjoint? this-block (car pair))
+		 (lineout "Overlap " action " " pid time " (" location ")" " " (hex start) ":" (hex end) " with "
+			  (hex (car (car pair))) ":" (hex (cdr (car pair)))
+			  " " (car (cdr pair)) " " (elt (cdr pair) 1) (elt (cdr pair) 2)
+			  "(" (elt (cdr pair) 3) ")"))))
+	   (add-block! start end action pid time location)))
+	((or (equal? action "fd_free")  (equal? action "fd_xfree")
+	     (equal? action "fd_realloc (free)") (equal? action "fd_xrealloc (free)"))
+	 (let* ((entry  (try (get blocks-in-use (cons start end))
+			     (get blocks-in-use (get blocks-in-use start))))
+		(known (car entry)))
+	   (if (fail? known)
+	       (lineout "Unknown " action " " (hex start) ":" (if (null? end) "?" end) " -- "
+			pid time " (" location ")")
+	     (begin
+	      (unless (or (and (equal? action "fd_free")  (equal? known "fd_malloc"))
+			  (and (equal? action "fd_xfree")  (equal? known "fd_xmalloc"))
+			  (and (equal? action "fd_free")  (equal? known "fd_realloc (new)"))
+			  (and (equal? action "fd_xfree")  (equal? known "fd_xrealloc (new)"))
+			  (and (equal? action "fd_realloc (free)")  (equal? known "fd_malloc"))
+			  (and (equal? action "fd_realloc (free)")  (equal? known "fd_realloc (new)"))
+			  (and (equal? action "fd_xrealloc (free)")  (equal? known "fd_xmalloc"))
+			  (and (equal? action "fd_xrealloc (free)")  (equal? known "fd_xrealloc (new)")))
+		(lineout "Mismatch " known "/" action " "
+			 (hex start) ":" (if (null? end) "?" end) " -- "
+			 action pid time " (" location ") -- "
+			 (car entry) " " pid time " (" location ")"))
+	      (drop-block! start end)))))))
+
+(define (handle-line line)
+  (let ((segments (segment line "\t")))
+    (handle-block (string->number (elt segments 0) 16)
+		  (if (equal? "" (elt segments 1)) '()
+		    (string->number (elt segments 1) 16))
+		  (read-from-string (elt segments 2))
+		  (read-from-string (elt segments 3))
+		  (qstring (elt segments 4))
+		  (qstring (elt segments 5))
+		  (read-from-string (elt segments 6)))))
+
+
+(define (check-malloc-log stream)
+  (let ((in (if (string? stream) (open-input-file stream) stream)))
+    (let ((line (readline in)) (count 1))
+      (until (eof-object? line)
+	(if (zero? (remainder count 500)) (lineout count ": " line))
+	(handle-line line)
+	(set! line (readline in)) (set! count (1+ count))))))
+
+(module-export 'check-malloc-log)

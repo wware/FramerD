@@ -1,0 +1,82 @@
+;;; -*- Mode: FDScript; -*-
+
+;;; Extended Pool and Index functionality;
+;;; Copyright (C) beingmeta inc, 2002
+;;; $Id: index-plus.fdx,v 1.11 2002/07/05 14:32:44 haase Exp $
+
+(in-module 'index-plus '{fdinternals fdtext osprims})
+
+(define index-map-table (make-hashtable))
+
+(define default-index #f)
+
+(define (interpret-spec fcn spec)
+  (cond ((symbol? spec)
+	 (let ((val (difference (fdgetenv spec) spec)))
+	   (if (fail? val)
+	       (raise-exception "Environment variable not set"
+				(symbol->string spec))
+	       (interpret-spec fcn val))))
+	((not (string? spec)) spec)
+	((find #\& spec)
+	 (elts (map (lambda (x) (interpret-spec fcn x))
+		    (segment spec "&"))))
+	(else (fcn spec))))
+
+(define (use-pools-fn spec)
+  (let ((id (pool-id (use-pool spec))))
+    (filter-choices (pool (all-pools))
+      (equal? (pool-id pool) id))))
+
+(define (use-pools spec) (interpret-spec use-pools-fn spec))
+
+(define (associate-index! key index)
+  (if (oid? key)
+      (hashtable-add! index-map-table key (open-index index))
+      (let ((pool (use-pool key)))
+	(hashtable-add! index-map-table pool (open-index index))
+	pool))
+  key)
+(sdefine (set-default-index! index)
+  (set! default-index (open-index index)))
+
+(define (get-index arg)
+  (try (hashtable-get index-map-table arg)
+       (if (oid? arg)
+	   (hashtable-get index-map-table (get-pool arg))
+	   (hashtable-get index-map-table (use-pool arg)))))
+
+(define (index-slots frame . args)
+  (apply index-frame (try (get-index frame) default-index) frame args))
+
+(define (use-pool+-fn pool (index #f))
+  (associate-index! (use-pools pool) (open-index (or index pool))))
+
+(define (use-pool+ pool (index #f))
+  (if index (use-pool+-fn pool index)
+      (interpret-spec use-pool+-fn pool)))
+
+(define (use-pool++-fn pool (index #f))
+  (associate-index! (use-pools pool) (use-index (or index pool))))
+
+(define (use-pool++ pool (index #f))
+  (if index (use-pool++-fn pool index)
+      (interpret-spec use-pool++-fn pool)))
+
+(module-export!
+ '{
+   get-index associate-index! index-slots use-pools use-pool+ use-pool++})
+
+;;; $Log: index-plus.fdx,v $
+;;; Revision 1.11  2002/07/05 14:32:44  haase
+;;; Updated modules to use in-module implementation
+;;;
+;;; Revision 1.10  2002/07/05 11:21:39  haase
+;;; Reorganized index-plus.fdx  to make pool+ functions descend into & combinations
+;;;
+;;; Revision 1.9  2002/06/15 20:42:30  haase
+;;; Made IN-MODULE default to the same level of security as the current context
+;;;
+;;; Revision 1.8  2002/04/09 21:13:01  haase
+;;; Various fixes to use-pool+
+;;;

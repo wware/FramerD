@@ -1,0 +1,30 @@
+#!@prefix@/bin/fdscript
+;; -*- Mode: fdscript; -*-
+
+;;; $Id: make-super-pool.in,v 1.2 2002/04/02 21:43:06 haase Exp $
+
+(use-module 'fdmaint)
+(use-module 'fdshell)
+
+(define (explain-usage)
+  (lineout "Usage: make-super-pool <filename> [base-oid] [initial-load]")
+  (exit))
+(define (main)
+  (when (zero? nargs) (report-usage))
+  (when (file-exists? arg1)
+    (lineout "Error: File already exists."))
+  (case nargs
+    (1 (make-super-pool arg1))
+    (2 (if (oid? (read-from-string arg2))
+	   (make-super-pool arg1 (read-from-string arg2))
+	   (explain-usage)))
+    (3 (if (and (oid? (read-from-string arg2))
+		(fixnum? (read-from-string arg3)))
+	   (make-super-pool
+	    arg1 (read-from-string arg2) (read-from-string arg3))
+	   (explain-usage)))))
+
+;;; $Log: make-super-pool.in,v $
+;;; Revision 1.2  2002/04/02 21:43:06  haase
+;;; Added Id and log entries to scripts
+;;;

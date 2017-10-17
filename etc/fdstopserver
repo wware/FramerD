@@ -1,0 +1,7 @@
+#!/bin/bash
+cd $(dirname $1)
+name=$(basename $1 .fdz)
+touch ${name}.stop
+echo "Killing PID " $(cat ${name}.pid) "for" ${name}
+kill -TERM $(cat ${name}.pid)
+rm ${name}.pid

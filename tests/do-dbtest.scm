@@ -1,0 +1,8 @@
+(define test-batch-mode #t)
+(auto-cache-file-indices)
+(set-notify! #t)
+(lineout "Random seed is " (randomize!))
+(load-component "test-util.scm")
+(define (main . args)
+  (load-test "dbtest.scm")
+  (lineout "Finished db testing"))

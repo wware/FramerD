@@ -1,0 +1,33 @@
+This directory contains test suites for FramerD/FDScript.  All of the
+tests in this directory should normally be passed before changes are
+checked into CVS.
+
+The file "alltest.scm" contains all the component tests and is used
+when you do "make test" from the root directory.  In addition to
+testing functionality and error-freeness, it tracks memory usage to
+try and find leaking components (*).  In addition to Aubrey Jaffer's
+R4RS scheme tests, the other files contain general checks and some
+regression tests to make sure that old bugs haven't crept back in.
+
+The file dbtest.scm is a mini FramerD application which builds up a
+database of the files and expressions in the test suite and then tests
+against this databases.  This test is normally run twice: once from
+alltest.scm and once from the top level.  The alltest.scm test runs
+within a single FDScript session; the run from top level is run in
+several phases from different sessions, to make sure that the data is
+really preserved across sessions.
+
+The file server-test.sh makes a different fake database and starts
+seven clients accessing it at once.  It is as close to a system wide
+test as we get.
+
+In addition to the component tests, which can be loaded all at once,
+there are the beginnings of some systemic tests.  The hammer-brico.sh
+script gives a brico server a really hard time by launching many
+different processes hitting on the server.
+
+(*) Regarding the leak tests, note that r4rstest.scm is expected to
+leak a little because it does some circular list testing which
+deceives our reference-counting GC.  In addition, threadtest.scm may
+leak because it loses some pointers due to a test for the reality of
+threading (e.g. the neccessity of locks).

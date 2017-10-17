@@ -1,0 +1,398 @@
+/* FramerD configuration header file, transformed by ./configure
+   Copyright (C) 1994-2001 Massachusetts Institute of Technology
+   Copyright (C) 2001-2005 beingmeta, inc. (A Delaware Corporation)
+
+    Use, modification, and redistribution of this program is permitted
+    under the terms of either (at the developer's discretion) the GNU
+    General Public License (GPL) Version 2, the GNU Lesser General Public
+    License.
+
+    This program is based on the FramerD library released in Fall 2001 by
+    MIT under both the GPL and the LGPL licenses, both of which accompany
+    this distribution.  Subsequent modifications by beingmeta, inc. are
+    also released under both the GPL and LGPL licenses (at the developer's
+    discretion).
+
+   $Id: config.h.in,v 1.26 2005/01/14 16:48:44 haase Exp $
+*/
+
+#ifdef FRAMERD_CONFIG_H
+#define FRAMERD_CONFIG_H 1
+#else
+/* Define if on AIX 3.
+   System headers sometimes define this.
+   We just want to avoid a redefinition error message.  */
+#ifndef _ALL_SOURCE
+#undef _ALL_SOURCE
+#endif
+
+/* Define if you don't have off_t */
+#undef off_t
+
+/* Define if integers should be aligned  */
+#undef FD_WORDS_ARE_ALIGNED
+
+/* Define to specify whether file locking works  */
+#undef FD_WITH_FILE_LOCKING
+
+/* Define to specify whether large files are to be used  */
+#undef FD_LARGEFILES_ENABLED
+
+/* Define to specify whether to use MMAP  */
+#undef FD_WITH_MMAP_MALLOC
+
+/* Define to compile with multi threading */
+#undef FD_THREADS_ENABLED
+
+/* Define if you are using dynamic linking.  */
+#undef FD_DYNAMIC_LINKING_ENABLED
+
+/* Define to compile with or without readline if possible */
+#undef FD_WITH_READLINE
+
+/* Define to compile with or without dmalloc */
+#undef FD_WITH_DMALLOC
+
+/* Define if you have FastCGI headers.  */
+#undef FD_WITH_FASTCGI
+
+/* Define to suppress dangling errno messages */
+#undef FD_ERRNO_CHECKING_ENABLED
+
+/* Define to enable optional detailed malloc debugging */
+#undef FD_LOG_MALLOC
+
+/* Define to use consed OIDS  */
+#undef FD_LIGHTWEIGHT_OIDS
+
+/* Define when using constructor expressions  */
+#undef HAVE_CONSTRUCTOR_EXPRESSIONS
+
+/* Where the default config file gets read from */
+#undef DEFAULT_FRAMERD_CONFIG
+
+/* What the suffix for shared library files usually is */
+#undef FD_SHARED_LIB_SUFFIX
+
+/* Determines whether we use pointer aliasing in places */ 
+#undef FD_WITHOUT_POINTER_KLUDGES
+
+/* Define to *not* use STDIO with sockets */ 
+#undef FD_USE_STDIO_WITH_SOCKETS
+
+/* Define to use block malloc */ 
+#undef FD_WITH_BLOCK_MALLOC
+
+/* Define if you have the strftime function.  */
+#undef HAVE_STRFTIME
+
+/* Define if you have the gettimeofday function.  */
+#undef HAVE_GETTIMEOFDAY
+
+/* Define if you have the ftime function.  */
+#undef HAVE_FTIME
+
+/* Define if your struct tm has tm_zone.  */
+#undef HAVE_TM_ZONE
+
+/* Define if you have fputwc.  */
+#undef HAVE_FPUTWC
+
+/* Define if you have fgetwc.  */
+#undef HAVE_FGETWC
+
+/* Define if you have mmap.  */
+#undef HAVE_MMAP
+
+/* Define if your struct tm has tm_gmtoff.  */
+#undef HAVE_TM_GMTOFF
+
+/* Define if you have the uchar type.  */
+#undef HAVE_UCHAR
+
+/* Define if you don't have tm_zone but do have the external array
+   tzname.  */
+#undef HAVE_TZNAME
+
+/* Define as __inline if that's what the C compiler calls it.  */
+#undef inline
+
+/* Define if the `S_IS*' macros in <sys/stat.h> do not work properly.  */
+#undef STAT_MACROS_BROKEN
+
+/* Define if you have the ANSI C header files.  */
+#undef STDC_HEADERS
+
+/* Define if you can safely include both <sys/time.h> and <time.h>.  */
+#undef TIME_WITH_SYS_TIME
+
+/* Define if your <sys/time.h> declares struct tm.  */
+#undef TM_IN_SYS_TIME
+
+/* Define if your processor stores words with the most significant
+   byte first (like Motorola and SPARC, unlike Intel and VAX).  */
+#undef WORDS_BIGENDIAN
+
+/* The number of bytes in an int.  */
+#undef SIZEOF_INT
+
+/* The number of bytes in a long.  */
+#undef SIZEOF_LONG
+
+/* The number of bytes in a long long.  */
+#undef SIZEOF_LONG_LONG
+
+/* The number of bytes in a pointer.  */
+#undef SIZEOF_VOID_P
+
+/* Define if you have the strdup function.  */
+#undef HAVE_STRDUP
+
+/* Define if you have the usleep function.  */
+#undef HAVE_USLEEP
+
+/* Define if you have the nanosleep function.  */
+#undef HAVE_NANOSLEEP
+
+/* Define if you have the flock function.  */
+#undef HAVE_FLOCK
+
+/* Define if you have the mkstemp function.  */
+#undef HAVE_MKSTEMP
+
+/* Define if you have the fseeko function (for large files).  */
+#undef HAVE_FSEEKO
+
+/* Define if you have the realpath function.  */
+#undef HAVE_REALPATH
+
+/* Define if you have the wait4 function.  */
+#undef HAVE_WAIT4
+
+/* Define if you have the <dirent.h> header file.  */
+#undef HAVE_DIRENT_H
+
+/* Define if you have the <dlfcn.h> header file.  */
+#undef HAVE_DLFCN_H
+
+/* Define if you have the <fcntl.h> header file.  */
+#undef HAVE_FCNTL_H
+
+/* Define if you have the <ndir.h> header file.  */
+#undef HAVE_NDIR_H
+
+/* Define if you have the <netdb.h> header file.  */
+#undef HAVE_NETDB_H
+
+/* Define if you have the <sys/types.h> header file.  */
+#undef HAVE_SYS_TYPES_H
+
+/* Define if you have the <pwd.h> header file.  */
+#undef HAVE_PWD_H
+
+/* Define if you have the <grp.h> header file.  */
+#undef HAVE_GRP_H
+
+/* Define if you have the <netinet/in.h> header file.  */
+#undef HAVE_NETINET_IN_H
+
+/* Define if you have the <pthread.h> header file.  */
+#undef HAVE_PTHREAD_H
+
+/* Define if you have the <sys/dir.h> header file.  */
+#undef HAVE_SYS_DIR_H
+
+/* Define if you have the <sys/fcntl.h> header file.  */
+#undef HAVE_SYS_FCNTL_H
+
+/* Define if you have the <sys/filio.h> header file.  */
+#undef HAVE_SYS_FILIO_H
+
+/* Define if you have the <sys/ioctl.h> header file.  */
+#undef HAVE_SYS_IOCTL_H
+
+/* Define if you have the <sys/ndir.h> header file.  */
+#undef HAVE_SYS_NDIR_H
+
+/* Define if you have the <sys/resource.h> header file.  */
+#undef HAVE_SYS_RESOURCE_H
+
+/* Define if you have the <sys/select.h> header file.  */
+#undef HAVE_SYS_SELECT_H
+
+/* Define if you have the <sys/socket.h> header file.  */
+#undef HAVE_SYS_SOCKET_H
+
+/* Define if you have the <sys/un.h> header file.  */
+#undef HAVE_SYS_UN_H
+
+/* Define if you have the <sys/stat.h> header file.  */
+#undef HAVE_SYS_STAT_H
+
+/* Define if you have the <sys/fcntl.h> header file.  */
+#undef HAVE_SYS_FILE_H
+
+/* Define if you have the <sys/wait.h> header file.  */
+#undef HAVE_SYS_WAIT_H
+
+/* Define if you have the <unistd.h> header file.  */
+#undef HAVE_UNISTD_H
+
+/* Define if you have the <libintl.h> header file.  */
+#undef HAVE_LIBINTL_H
+
+/* Define if you have the <dmalloc.h> header file.  */
+#undef HAVE_DMALLOC_H
+
+/* Define if you have the dmalloc library (-ldmalloc).  */
+#undef HAVE_LIBDMALLOC
+
+/* Define if you have the dl library (-ldl).  */
+#undef HAVE_LIBDL
+
+/* Define if you have the m library (-lm).  */
+#undef HAVE_LIBM
+
+/* Define if you have the pthread library (-lpthread).  */
+#undef HAVE_LIBPTHREAD
+
+/* Define if you have the pthread library (-lpthread).  */
+#undef HAVE_LIBC_R
+
+/* Define if you have wide char definitions.  */
+#undef HAVE_WCHAR_H
+
+/* Define if you have readline include.  */
+#undef HAVE_READLINE_READLINE_H
+
+/* Define if you have readline library.  */
+#undef HAVE_LIBREADLINE
+
+/* Define if your readline library has
+   the filename_completion_function function.  */
+#undef HAVE_FILENAME_COMPLETION_FUNCTION
+
+/* Define if your readline library has
+   the rl_filename_completion_function function.  */
+#undef HAVE_RL_FILENAME_COMPLETION_FUNCTION
+
+/* Define if you need to init the FDTEXT library.  */
+#undef INIT_FDTEXT
+
+/* Define if you need to init the FDWWW library.  */
+#undef INIT_FDWWW
+
+/* Define if you need to init the FDANALOGY library.  */
+#undef INIT_FDANALOGY
+
+/* Define to where your full unicode data file lives.  */
+#undef FULL_UNICODE_DATA
+
+/* Define if you have FastCGI headers.  */
+#undef HAVE_FCGIAPP_H
+
+/* Define if you have FastCGI library.  */
+#undef HAVE_LIBFCGI
+
+/* Define as host os name  */
+#undef FD_OSID
+
+/* Where the FramerD shared data lives */
+#undef FRAMERD_SHARE_DIR
+
+/* Where the FramerD modules live */
+#undef FRAMERD_MODULE_DIR
+
+/* This is where shared objects get put */ 
+#undef LIB_INSTALL_DIR
+
+/* This is where executable binaries get put */ 
+#undef BIN_INSTALL_DIR
+
+/* Define if you have the <valgrind.h> header file.  */
+#undef HAVE_VALGRIND_H
+
+/* Whether to use the proc file system to fill in gaps in getrusage */ 
+#undef FD_PROC_RUSAGE_PATCH
+
+/* The FramerD major version number */ 
+#undef FD_MAJOR_VERSION
+
+/* The FramerD minor version number */ 
+#undef FD_MINOR_VERSION
+
+/* The FramerD release version number */ 
+#undef FD_RELEASE_VERSION
+
+#endif
+
+
+
+/* File specific stuff */
+
+/* The CVS log for this file
+   $Log: config.h.in,v $
+   Revision 1.26  2005/01/14 16:48:44  haase
+   Updated copyrights to 2005
+
+   Revision 1.25  2004/07/20 09:16:10  haase
+   Updated copyright year, removed dead code, and cleaned up some whitespace
+
+   Revision 1.24  2004/07/19 14:40:27  haase
+   Check for off_t explicitly
+
+   Revision 1.23  2004/07/18 14:22:19  haase
+   Added option for disabling largefile support
+
+   Revision 1.22  2004/07/16 16:43:41  haase
+   Made OIDs be long longs if they're big enough
+
+   Revision 1.21  2004/07/16 14:34:25  haase
+   Added configuration option for largefiles
+
+   Revision 1.20  2003/12/18 03:37:55  haase
+   Added defs for shared library suffix
+
+   Revision 1.19  2003/10/20 12:08:50  haase
+   Interface renaming (mostly) for malloc logging
+
+   Revision 1.18  2003/10/06 11:05:22  haase
+   Added support for detailed malloc debugging
+
+   Revision 1.17  2003/09/10 17:58:29  haase
+   Made slotmaps grow linearly in size
+
+   Revision 1.16  2003/08/27 10:53:28  haase
+   Merged 2.4 patches into trunk, started 2.5
+
+   Revision 1.15.2.3  2003/08/06 18:41:06  haase
+   Updated copyright notices to 2003
+
+   Revision 1.15.2.2  2002/08/10 18:03:22  haase
+   Made code use constructor expressions if available
+
+   Revision 1.15.2.1  2002/08/09 16:38:59  haase
+   Added FD_ prefix to configuration macros
+
+   Revision 1.15  2002/07/26 16:30:12  haase
+   Switched over to three part version identifiers (major,minor,release)
+
+   Revision 1.14  2002/06/10 00:29:24  haase
+   Add other thread library tests, but suppress them for BSD (for now)
+
+   Revision 1.13  2002/04/16 13:16:02  haase
+   Made use of stdio with sockets be a configuration option
+
+   Revision 1.12  2002/04/04 01:56:33  haase
+   Added sys/filio.h check
+
+   Revision 1.11  2002/04/02 21:41:08  haase
+   Added log and emacs init entries to C source files
+
+*/
+
+/* Emacs local variables
+;;;  Local variables: ***
+;;;  compile-command: "cd ../..; make" ***
+;;;  End: ***
+*/

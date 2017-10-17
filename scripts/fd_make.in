@@ -1,0 +1,20 @@
+#!@prefix@/bin/fdscript
+;; -*- Mode: fdscript; -*-
+
+;;; $Id: fd_make.in,v 1.2 2002/04/02 21:43:06 haase Exp $
+
+(use-module 'fdshell)
+
+(define (main)
+  (control-frame-printing 2)
+  (let ((parsed-args '()))
+    (do ((a args (cddr a)))
+	((null? a)
+	 (fdd (apply frame-create %pool (reverse parsed-args))))
+      (set! parsed-args (cons (fdsh_arg (car a) #t) parsed-args))
+      (set! parsed-args (cons (fdsh-arg (cadr a)) parsed-args)))))
+
+;;; $Log: fd_make.in,v $
+;;; Revision 1.2  2002/04/02 21:43:06  haase
+;;; Added Id and log entries to scripts
+;;;

@@ -1,0 +1,8 @@
+libdtypes.a
+libframerd.a
+libfdscript.a
+libfdtext.a
+libdtypes.so
+libframerd.so
+libfdscript.so
+libfdtext.so

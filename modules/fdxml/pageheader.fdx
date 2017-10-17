@@ -1,0 +1,75 @@
+(in-module 'fdxml/pageheader 'fdxml)
+
+(use-module cgimodule)
+(use-module 'htmlgen)
+(use-module 'xmlgen)
+(use-module 'fdtext)
+(use-module 'fdwww)
+
+(module-export! '{pageheader sitelogo getlogo
+		  set-default-logo! add-logo!})
+
+;;; Dealing with logos
+
+(define logo-map (make-hashtable))
+(define default-logo {})
+
+(define (sitelogo ref)
+  (if (string? ref) (image ref class "sitelogo")
+    (image (getlogo ref) class "sitelogo")))
+
+(define (getlogo arg)
+  (try (cond ((frame? arg)
+	      (try (get logo-map (get-pool arg))
+		   (get logo-map (pool-label (get-pool arg)))))
+	     ((pool? arg)
+	      (try (get logo-map arg)
+		   (get logo-map (pool-label arg))))
+	     (else (fail)))
+       default-logo))
+
+(define (set-default-logo! logo) (set! default-logo logo))
+(define (add-logo! obj logo) (hashtable-add! logo-map obj logo))
+
+;;; Translating image URLs
+
+(define image-url-rewrite-rules #f)
+
+(define (rewrite-image-url url)
+  (if image-url-rewrite-rules
+      (try (pick-one (tx-subst image-url-rewrite-rules url)) url)
+    url))
+
+(define (set-image-url-rewrite-rule! v)
+  (set! image-url-rewrite-rules v))
+
+(define (imageref href (class #f) (style #f))
+  (image (if (string? href) (rewrite-image-url href) href)
+	 class (or class {}) style (or style {})))
+
+(module-export! '{rewrite-image-url set-image-url-rewrite-rule!
+		  imageref})
+
+;;; PAGEHEADER
+
+(define (pageheader (about #f) (sublogo #f)
+		    (rightimage #f) (righturl #f)
+		    %env . body)
+  (table* (class "pageheader" width "100%")
+    (tr (if about
+	    (th* (class "applogo")
+	      (sitelogo about) (br)
+	      (when sublogo
+		(div (class "sublogo")
+		  (if (string? sublogo) sublogo
+		    (xmleval sublogo %env))))))
+	(th* (class "content")
+	  (dolist (elt (xml-content body)) (unparse-xml elt %env)))
+	(when rightimage
+	  (th* (class "rightimage")
+	    (if righturl (anchor righturl (imageref rightimage))
+	      (imageref rightimage)))))))
+
+
+
+

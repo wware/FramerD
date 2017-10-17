@@ -1,0 +1,288 @@
+;;; -*- Mode: fdscript; -*-
+
+;;; This is the module file for using the brico knowledge base.  It
+;;; includes variables bound to the main derived slot types and
+;;; defines the methods used by those slots.
+;;; Copyright (C) beingmeta, inc. 2001-2002
+;;;   $Id: brico-methods.fdx,v 1.8 2004/05/04 01:04:51 haase Exp $
+
+(in-module 'brico)
+(use-module 'fdtext)
+(use-module 'fdinternals)
+
+(define (get-concept-description frame)
+  (get frame (choice 'gloss cyc-comment)))
+
+;;; Methods for language slots
+
+(define (get-translations frame slot)
+  (let ((language (get slot 'key))
+	(source (get slot 'through)))
+    (cadr
+     (filter-choices (translation (get frame source))
+       (eq? (car translation) language)))))
+(define (add-translation frame slot word)
+  (let ((source (get slot 'through)))
+    (add! frame source (list (get slot 'key) word))
+    (index-frame (get-index frame) frame slot (choice word (stdstring word)))))
+(define (drop-translation frame slot word)
+  (let ((source (get slot 'through)))
+    (drop! frame source (list (get slot 'key) word))
+    (index-drop! (get-index frame) frame slot (choice word (stdstring word)))))
+
+(define (get-words frame slot) (get frame 'words))
+(define (add-word frame slot word)
+  (add! frame 'words word)
+  (index-frame (get-index frame) frame (choice 'words english)
+	       (choice word (stdstring word))))
+(define (drop-word frame slot word)
+  (drop! frame 'words word)
+  (index-drop! (get-index frame) frame (choice english 'words)
+	       (choice word (stdstring word))))
+
+(define (gloss-get frame slot) (get frame 'gloss))
+(define (gloss-add frame slot word)
+  (add! frame 'gloss word))
+(define (gloss-drop frame slot word)
+  (drop! frame 'gloss word))
+
+(define (get-all-words frame slot)
+  (choice (get frame 'words) (cadr (get frame 'translations))))
+(define (get-atomic-words frame slot)
+  (let ((all-words (choice (get frame 'words)
+			   (cadr (get frame 'translations)))))
+    (elts (segment all-words))))
+
+(define (get-langids word frame)
+  (let* ((langs (for-choices (tran (get frame 'translations))
+		  (if (if (pair? (cdr tran))
+			  (equal? (cadr tran) word)
+			  (equal? (cdr tran) word))
+		      (car tran)
+		      (fail))))
+	 (f (?? 'type 'language 'key langs)))
+    (choice (try (get f 'iso639/1) (get f 'iso639/B))
+	    (if (test frame 'words word) "en" (fail)))))
+
+(define (get-gloss-slotid language)
+  (?? 'type 'gloss 'language language))
+
+(define (get-gloss c languages (try-hard #t))
+  (if (> (choice-size languages) 1)
+      (with-string-output
+	  (do-choices (gloss (try (get c (get-gloss-slotid languages))
+				  (if try-hard (get c 'gloss) (fail))))
+	    (lineout gloss)))
+    (try (get c (get-gloss-slotid languages))
+	 (if try-hard (get c 'gloss) (fail)))))
+(module-export! 'get-gloss)
+
+;; For language slots
+(module-export!
+ '{get-translations add-translation drop-translation})
+;; For English language slot
+(module-export!
+ '{get-words add-word drop-word})
+;; For English language slot
+(module-export! '{gloss-get gloss-add gloss-drop})
+;; For English language slot
+(module-export! '{get-all-words get-atomic-words})
+
+;;; Maintaining caches of slot refs
+
+(define special-genls-slotids (choice 'hypernym 'roget-within genls))
+(define special-specls-slotids (choice 'hyponym 'roget-contains specls))
+(define special-disjoint-slotids disjoint)
+(define special-isa-slotids isa)
+
+(define special-part-of-slotids (choice 'part-of part-of))
+(define special-parts-slotids (choice parts 'parts))
+(define special-member-of-slotids (choice member-of 'member-of))
+(define special-members-slotids (choice members 'members))
+(define special-ingredient-of-slotids (choice ingredient-of 'stuff-of))
+(define special-ingredients-slotids (choice ingredients 'ingredients))
+
+(define genls-slotids special-genls-slotids)
+(define specls-slotids special-specls-slotids)
+(define disjoint-slotids special-disjoint-slotids)
+(define isa-slotids special-isa-slotids)
+
+(define part-of-slotids {})
+(define parts-slotids {})
+(define member-of-slotids {})
+(define members-slotids {})
+(define ingredient-of-slotids {})
+(define ingredients-slotids {})
+(define used-for-slotids {})
+
+;;; Resetting BRICO from the background
+
+(define (reset-brico!)
+  (when (exists? %background)
+    (set! genls-slotids (choice genls (find-frames %background genls genls)))
+    (set! specls-slotids (choice specls (find-frames %background genls specls)))
+    (set! disjoint-slotids (find-frames %background genls specls))
+    (set! isa-slotids (find-frames %background genls isa))
+
+    (set! part-of-slotids (find-frames %background genls part-of))
+    (set! parts-slotids (find-frames %background genls parts))
+    (set! member-of-slotids (find-frames %background genls member-of))
+    (set! members-slotids (find-frames %background genls members))
+    (set! ingredient-of-slotids (find-frames %background genls ingredient-of))
+    (set! ingredients-slotids (find-frames %background genls ingredients))))
+
+;;; The methods
+
+(define (inv-add! f slotid v)
+  (cond ((and (oid? f) (writable? f))
+	 (add! f slotid v)
+	 (if (writable? v) (add! v (get slotid inverse) f))
+	 (index-frame (get-index f) f slotid v))
+	((and (oid? v) (writable? v))
+	 (add! v (get slotid inverse) f)
+	 (index-frame (get-index v) v (get slotid inverse) f))
+	(else (error "Can't write genls(" f ")=" v))))
+(define (inv-drop! f slotid v)
+  (cond ((and (oid? f) (writable? f))
+	 (drop! f slotid v)
+	 (if (writable? v) (drop! v (get slotid inverse) f))
+	 (index-drop! %background (cons slotid v) f)
+	 (index-drop! %background (cons slotid f) v))
+	((and (oid? v) (writable? v))
+	 (add! v (get slotid inverse) f)
+	 (index-drop! %background (cons (get slotid inverse) f) v)
+	 (index-drop! %background (cons slotid f) v))
+	(else (error "Can't write genls(" f ")=" v))))
+
+
+(define (get-genls f slotid)
+  (choice (%get f special-genls-slotids)
+	  (get f genls-slotids)
+	  (if (empty? %background) (fail)
+	    (find-frames %background specls-slotids f))))
+(define (test-genls f slotid v)
+  (or (%test f special-genls-slotids v)
+      (test f genls-slotids v)
+      (test v specls-slotids f)))
+
+
+(define (get-specls f slotid)
+  (choice (%get f special-specls-slotids)
+	  (get f specls-slotids)
+	  (if (empty? %background) (fail)
+	    (find-frames %background genls-slotids f))))
+(define (test-specls f slotid v)
+  (or (%test f special-specls-slotids v)
+      (test f specls-slotids v)
+      (test v specls-slotids f)))
+
+(define (get-part-of f slotid)
+  (choice (%get f special-part-of-slotids)
+	  (get f part-of-slotids)
+	  (if (empty? %background) (fail)
+	    (find-frames %background parts-slotids f))))
+(define (test-part-of f slotid v)
+  (or (%test f special-part-of-slotids v)
+      (test f part-of-slotids v)
+      (test v parts-slotids f)))
+
+(define (get-parts f slotid)
+  (choice (%get f special-parts-slotids)
+	  (get f parts-slotids)
+	  (if (empty? %background) (fail)
+	    (find-frames %background part-of-slotids f))))
+(define (test-parts f slotid v)
+  (or (%test f special-parts-slotids v)
+      (test f parts-slotids v)
+      (test v part-of-slotids f)))
+
+(define (get-member-of f slotid)
+  (choice (%get f special-member-of-slotids)
+	  (get f member-of-slotids)
+	  (if (empty? %background) (fail)
+	    (find-frames %background members-slotids f))))
+(define (test-member-of f slotid v)
+  (or (%test f special-member-of-slotids v)
+      (test f member-of-slotids v)
+      (test v members-slotids f)))
+
+(define (get-members f slotid)
+  (choice (%get f special-members-slotids)
+	  (get f members-slotids)
+	  (if (empty? %background) (fail)
+	    (find-frames %background member-of-slotids f))))
+(define (test-members f slotid v)
+  (or (%test f special-members-slotids v)
+      (test f members-slotids v)
+      (test v member-of-slotids f)))
+
+(define (get-ingredient-of f slotid)
+  (choice (%get f special-ingredient-of-slotids)
+	  (get f ingredient-of-slotids)
+	  (if (empty? %background) (fail)
+	    (find-frames %background ingredients-slotids f))))
+(define (test-ingredient-of f slotid v)
+  (or (%test f special-ingredient-of-slotids v)
+      (test f ingredient-of-slotids v)
+      (test v ingredients-slotids f)))
+
+(define (get-ingredients f slotid)
+  (choice (%get f special-ingredients-slotids)
+	  (get f ingredients-slotids)
+	  (if (empty? %background) (fail)
+	    (find-frames %background ingredient-of-slotids f))))
+(define (test-ingredients f slotid v)
+  (or (%test f special-ingredients-slotids v)
+      (test f ingredients-slotids v)
+      (test v ingredient-of-slotids f)))
+
+(define (get=is= f slotid)
+  (choice (%get f slotid)
+	  (if (empty? %background) (fail) (?? slotid f))))
+(define (test=is= f slotid v)
+  (or (%test f slotid v) (%test v slotid f)))
+(define (test=is= f slotid v)
+  (or (%test f slotid v) (%test v slotid f)))
+
+;;; Getting trigrams and bigrams
+
+(define (scheme-get-trigrams text)
+  (let ((trigrams {}))
+    (do-choices (word (elts (csegment (string-base text))))
+      (dotimes (i (- (length word) 2))
+	(let ((core-trigram (subseq word i (+ i 2))))
+	  (set+! trigrams core-trigram)
+	  (unless (lowercase? core-trigram)
+	    (set+! trigrams (string-downcase core-trigram))))))
+    trigrams))
+
+(define (trigrams-get frame slotid)
+  (get-trigrams (get frame all-words)))
+
+(define (scheme-get-bigrams text)
+  (let ((bigrams {}))
+    (do-choices (word (elts (csegment (string-base text))))
+      (dotimes (i (- (length word) 1))
+	(let ((core-bigram (subseq word i (+ i 1))))
+	  (set+! bigrams core-bigram)
+	  (unless (lowercase? core-bigram)
+	    (set+! bigrams (string-downcase core-bigram))))))
+    bigrams))
+
+(define (bigrams-get frame slotid)
+  (get-bigrams (get frame all-words)))
+
+(module-export! '{trigrams-get bigrams-get})
+
+;;; Export the symbols
+
+(module-export!
+ '{reset-brico!
+   brico-pool brico-index brico-pools
+   wordnet-source roget-source cyc-source
+   get-genls test-genls get-specls test-specls
+   get-part-of test-part-of get-parts test-parts
+   get-member-of get-member-of get-members test-members
+   get-ingredient-of test-ingredient-of get-ingredients test-ingredients
+   get-concept-description get-langids get=is= test=is=
+   inv-add! inv-drop!})

@@ -1,0 +1,187 @@
+(in-module 'fdxml/pager)
+
+(use-module '{fdxml fdtext fdwww htmlgen xmlgen})
+
+(module-export! 'pager)
+
+(define pager-cache (make-hashtable))
+
+(define (sort-results-for-url url unordered sortkey sortorder)
+  (let ((ordered
+	 (if (or (not sortorder) (eq? sortorder 'increasing)
+		 (eq? sortorder '<))
+	     (if sortkey (sorted unordered sortkey)
+	       (sorted unordered))
+	   (reverse (if sortkey (sorted unordered sortkey)
+		      (sorted unordered))))))
+    ordered))
+(define (sort-results url unordered sortkey sortorder)
+  (if url
+      (cachecall1 sort-results-for-url url (qc unordered) sortkey sortorder url)
+    (sorted unordered sortkey)))
+
+(define (passable-sortkey? s) (or (symbol? s) (oid? s)))
+
+(define (make-pager-url base indexvar index)
+  (stringout base indexvar "=" index "&"))
+
+(define (generate-base-url reqdata sortkey sortorder slotvars)
+  (define (convert-query-vars varlist)
+    (if (null? varlist) '()
+      (list* (car varlist) (qc (cadr varlist))
+	     (convert-query-vars (cddr varlist)))))
+  (and slotvars (not (null? slotvars))
+       (let ((pass-bindings (convert-query-vars slotvars)))
+	 (if (and (passable-sortkey? sortkey) sortorder)
+	     (apply scripturl (pick-one (get reqdata 'script_uri))
+		    'sortkey sortkey 'sortorder sortorder
+		    pass-bindings)
+	     (if (passable-sortkey? sortkey)
+		 (apply scripturl (pick-one (get reqdata 'script_uri))
+			'sortkey sortkey pass-bindings)
+		 (apply scripturl (pick-one (get reqdata 'script_uri))
+			pass-bindings))))))
+
+(define (display-pager-control base-url indexvar index n-items
+			       pagesize chapsize)
+  (let* ((pageno (quotient index pagesize))
+	 (chapno (quotient pageno chapsize))
+	 (max-page (1+ (quotient n-items pagesize)))
+	 (max-chapter (quotient max-page chapsize))
+	 (prev-page
+	  (and (> pageno 0) (- index pagesize)))
+	 (next-page
+	  (and (< pageno max-page) (+ index pagesize)))
+	 (prev-chapter
+	  (and (> chapno 0) (* pagesize (- pageno chapsize))))
+	 (next-chapter
+	  (and (< chapno max-chapter)
+	       (* pagesize (+ pageno chapsize))))
+	 (start-page (* chapno chapsize))
+	 (n-pages (min chapsize (- max-page start-page))))
+    (div (class "pager_control")
+      (xmlout "There are " n-items " results "
+	      " (page " (1+ pageno) " of " max-page ")" (br))
+      (if (> pageno 0)
+	  (anchor+ (make-pager-url base-url indexvar 0)
+		   (class "button" title "first page")
+		   (image "/graphics/pfirst_arrow" border 0 alt "|&lt;&lt;"))
+	(image "/graphics/stop_dot" class "button" border 0 alt "*"))
+      (if prev-chapter
+	  (anchor+ (make-pager-url base-url indexvar prev-chapter)
+		   (class "button" title "previous chapter")
+		   (image "/graphics/pprev_arrow" border 0 alt "&lt;&lt;"))
+	(image "/graphics/stop_dot" class "button" border 0 alot "*"))
+      (if prev-page
+	  (anchor+ (make-pager-url base-url indexvar prev-page)
+		   (class "button" title "previous page")
+		   (image "/graphics/prev_arrow" border 0 alt "&lt;"))
+	(image "/graphics/stop_dot" class "button" border 0 alot "*"))
+      (dotimes (i n-pages)
+	(if (> i 0) (xmlout "&nbsp;.&nbsp;"))
+	(if (= (+ start-page i) pageno)
+	    (span (class "pageno") (+ i start-page 1))
+	  (anchor+ (make-pager-url base-url indexvar (* pagesize (+ i start-page)))
+		   (class "pageno" title "Go to results page")
+		   (+ i start-page 1))))
+      (if next-page
+	  (anchor+ (make-pager-url base-url indexvar next-page)
+		   (class "button" title "next page")
+		   (image "/graphics/next_arrow" border 0 alt "&gt;"))
+	(image "/graphics/stop_dot" class "button" border 0
+	       alt "*"))
+      (if next-chapter
+	  (anchor+ (make-pager-url base-url indexvar next-chapter)
+		   (class "button" title "next chapter")
+		   (image "/graphics/nnext_arrow" border 0 alt "&gt;&gt;"))
+	(image "/graphics/stop_dot" class "button" border 0
+	       alt "*"))
+      (if (< chapno max-chapter)
+	  (anchor+ (make-pager-url base-url indexvar (* max-chapter chapsize pagesize))
+		   (class "button" title "last chapter")
+		   (image "/graphics/nlast_arrow" border 0 alt "&gt;&gt;|"))
+	(image "/graphics/stop_dot" class "button" border 0
+	       alt "*")))))
+  
+(define (htmlpager eltfn results id queryvars sortkey (sortorder #t)
+		   (pagesize 10) (chapsize 10) (controlpos 'both))
+  (div (class "pager")
+    (if (empty? results)
+	(div (class "pager_note") "There are no results")
+	(let ((idvar (intern id))
+	      (indexvar (intern (stringout id "_INDEX")))
+	      (sortorder (if (string? sortorder) (parse-arg sortorder) sortorder))
+	      (reqdata (cgi-data)))
+	  (let* ((base-url (generate-base-url
+			    (cgi-data) sortkey sortorder queryvars))
+		 (sorted-results
+		  (sort-results base-url (qc results) sortkey sortorder))
+		 (n-items (length sorted-results)))
+	    (if (> n-items pagesize)
+		(let* ((index (try (qget reqdata indexvar) 0)))
+		  (when (if (string? controlpos)
+			    (or (string-ci=? controlpos "both")
+				(string-ci=? controlpos "before"))
+			    (or (eq? controlpos 'both)  (eq? controlpos 'before)))
+		    (display-pager-control base-url indexvar index n-items pagesize chapsize))
+		  (div (class "pager_contents")
+		    (dotimes (i (min pagesize (- n-items index)))
+		      (span (class "pager_entry")
+			(let ((elt (vector-ref sorted-results (+ index i))))
+			  (eltfn elt (+ index i))))))
+		  (when (if (string? controlpos)
+			    (or (string-ci=? controlpos "both")
+				(string-ci=? controlpos "after"))
+			    (or (eq? controlpos 'both)  (eq? controlpos 'after)))
+		    (display-pager-control base-url indexvar index n-items pagesize chapsize)))
+		(begin
+		  (div (class "pager_note")
+		    (if (= (length sorted-results) 1)
+			(xmlout "There is 1 result")
+			(xmlout "There are " (length sorted-results) " results")))
+		  (div (class "pager_contents")
+		    (dotimes (i n-items)
+		      (span (class "pager_entry")
+			(let ((elt (vector-ref sorted-results i)))
+			  (eltfn elt i))))))))))
+    (xmlout)))
+
+(module-export! 'htmlpager)
+
+(define (generate-url-vars env queryvars contextvars)
+  (let* ((query-vars
+	  (if queryvars (map intern (segment queryvars {"," " "})) '()))
+	 (context-vars
+	  (if contextvars
+	      (map intern (segment contextvars {","" "})) '()))
+	 (result '()))
+    (dolist (var query-vars)
+      (set! result (append `(,var ,(eval var env)) result)))
+    (dolist (var context-vars)
+      (set! result (append `(,var ,(eval var env)) result)))
+    result))
+
+(define (pager id results %env (bind #f) (counter #f)
+	       (queryvars #f) (contextvars #f)
+	       (sortkey #f) (sortorder #f) (pagesize 10) (chapsize 15) (tablespan #f)
+	       (controlpos both)
+	       . xml-object)
+  (let ((pagesize (if (string? pagesize) (parse-arg pagesize) (or pagesize 10)))
+	(chapsize (if (string? chapsize) (parse-arg chapsize) (or chapsize 10)))
+	(countvar (and counter (intern counter)))
+	(bindvar (if bind (intern bind) (intern id)))
+	(urlvars (generate-url-vars %env queryvars contextvars))
+	(body (xml-content xml-object)))
+    (htmlpager (lambda (elt i)
+		 (if countvar
+		     (xmleval body %env bindvar elt countvar i)
+		   (xmleval body %env bindvar elt)))
+	       (qc results) id urlvars
+	       sortkey sortorder pagesize chapsize controlpos)))
+
+
+
+
+
+
+

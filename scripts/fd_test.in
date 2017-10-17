@@ -1,0 +1,17 @@
+#!@prefix@/bin/fdscript
+;; -*- Mode: fdscript; -*-
+
+;;; $Id: fd_test.in,v 1.2 2002/04/02 21:43:06 haase Exp $
+
+(use-module 'fdshell)
+
+(define (main)
+  (control-frame-printing 2)
+  (if (test (fdsh-arg arg1) (fdsh-arg arg2 #t) (fdsh-arg arg3))
+      (lineout "Yes " arg1 " " arg2 " " arg3)
+      (lineout "No " arg1 " " arg2 " " arg3)))
+
+;;; $Log: fd_test.in,v $
+;;; Revision 1.2  2002/04/02 21:43:06  haase
+;;; Added Id and log entries to scripts
+;;;

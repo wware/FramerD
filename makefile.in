@@ -1,0 +1,904 @@
+# Makefile for FramerD libraries and executables
+# $Id: makefile.in,v 1.106 2007/06/30 15:28:46 haase Exp $
+CC	= @CC@
+CFLAGS	= -Iinclude @extra_cc_flags@ @CFLAGS@ @REENTRANT@ @dynamic_cflag@ \
+          $(XCFLAGS) -DINSTALL_PREFIX=@exec_prefix@
+LDFLAGS = -L./lib @LDFLAGS@ @LIBS@ $(EFENCE)
+BUILDROOT = @top_srcdir@
+HERE = `pwd`
+BINDIR	 = @top_srcdir@/bin
+MAKEBIN	 = $(CC) $(CFLAGS) @extra_makebin_flags@ $(LDFLAGS) $(LIBS)
+HELPEXE  =
+XFDSCRIPT= @shared_lib_path@=./lib:${@shared_lib_path@} $(HELPEXE) ./bin/fdscript
+SFDSCRIPT= @shared_lib_path@=../lib:${@shared_lib_path@} $(HELPEXE) ../bin/fdscript
+DATESTAMP = $(shell date "+%Y%m%d")
+FD_MAJOR  = @fd_major_version@
+FD_MINOR  = @fd_minor_version@
+FD_RELEASE= @fd_release_version@
+FD_RELEASEID= $(FD_MAJOR).$(FD_MINOR).$(FD_RELEASE)
+FD_VERSION= $(FD_MAJOR).$(FD_MINOR).$(FD_RELEASE).0${DATESTAMP}
+LIBS      = @LIBS@ $(EFENCE)
+INIT_DIR        := $(shell etc/find_init_d.sh)
+FMODE		= 0664
+XMODE		= 0775
+
+prefix		= @prefix@
+exec_prefix	= @exec_prefix@
+CLEAN		= @CLEAN@
+INSTALL_GROUP	= @install_group@
+INSTALL		= @INSTALL@ @install_group_option@
+INSTALLDIR	= $(INSTALL) -m $(XMODE) -d
+INSTALLDATA	= $(INSTALL) -m $(FMODE)
+INSTALLEXE	= $(INSTALL) -m $(XMODE)
+INSTALLBIN	= $(INSTALLEXE)
+INSTALLLIB	= $(INSTALLDATA)
+FDUPDATE	= @shared_lib_path@=./lib:${@shared_lib_path@} bin/fdupdate
+
+INSTALLROOT	= $(DESTDIR)@exec_prefix@
+INCLINSTALLDIR	= $(DESTDIR)@exec_prefix@/include
+BININSTALLDIR	= $(DESTDIR)@bindir@
+SBININSTALLDIR	= $(DESTDIR)@sbindir@
+SCRIPTINSTALLDIR= $(DESTDIR)@bindir@
+LIBINSTALLDIR	= $(DESTDIR)@libdir@
+DISTDIR		= dist/framerd-$(FD_RELEASEID)
+MANDIR		= $(DESTDIR)@MANDIR@
+
+PACKAGE_MAKER   =\
+ /Developer/Applications/Utilities/PackageMaker.app/Contents/MacOS/PackageMaker
+
+DESTDIR		=
+
+TAR		= tar
+RANLIB		= @RANLIB@
+APXS		= apxs
+# For running internal scripts, set this to no
+FD_STOP_ON_EXCEPTIONS = no
+
+# Default rule for generating objects puts them in the source directory
+
+%.o: %.c
+	$(CC) $(CFLAGS) -o $@ -c $<
+
+# Interface version declarations (for shared libraries)
+
+DTYPES_VERSION=4
+DTYPES_COMPAT_VERSION=2
+FRAMERD_VERSION=3
+FRAMERD_COMPAT_VERSION=2
+FDSCRIPT_VERSION=4
+FDSCRIPT_COMPAT_VERSION=3
+FDTEXT_VERSION=2
+FDTEXT_COMPAT_VERSION=1
+FDWWW_VERSION=2
+FDWWW_COMPAT_VERSION=1
+
+DTYPES_LIB=libdtypes.a
+FRAMERD_LIB=libframerd.a
+FDSCRIPT_LIB=libfdscript.a
+FDTEXT_LIB=libfdtext.a
+FDWWW_LIB=libfdwww.a
+
+@ifshared@DTYPES_LIB=libdtypes.so.$(DTYPES_VERSION)
+@ifshared@FRAMERD_LIB=libframerd.so.$(FRAMERD_VERSION)
+@ifshared@FDSCRIPT_LIB=libfdscript.so.$(FDSCRIPT_VERSION)
+@ifshared@FDTEXT_LIB=libfdtext.so.$(FDTEXT_VERSION)
+@ifshared@FDWWW_LIB=libfdwww.so.$(FDWWW_VERSION)
+
+@ifshared@@ifmacosx@DTYPES_LIB=libdtypes.$(DTYPES_VERSION).dylib
+@ifshared@@ifmacosx@FRAMERD_LIB=libframerd.$(FRAMERD_VERSION).dylib
+@ifshared@@ifmacosx@FDSCRIPT_LIB=libfdscript.$(FDSCRIPT_VERSION).dylib
+@ifshared@@ifmacosx@FDTEXT_LIB=libfdtext.$(FDTEXT_VERSION).dylib
+@ifshared@@ifmacosx@FDWWW_LIB=libfdwww.$(FDWWW_VERSION).dylib
+
+# Component declarations
+
+DTYPES_HEADERS=	 include/dtypes.h \
+                 include/framerd/dtypes.h \
+                 include/framerd/common.h \
+		 include/framerd/strstream.h \
+		 include/framerd/fdmalloc.h \
+		 include/framerd/except.h \
+		 include/framerd/binio.h \
+		 include/framerd/dtcodes.h \
+		 include/framerd/lisp.h \
+		 include/framerd/cons.h \
+		 include/framerd/oids.h \
+		 include/framerd/os.h \
+		 include/framerd/config.h \
+		 version.major version.minor version.release 
+DTYPES_OBJECTS=src/cons/libdtypes.o \
+	      src/cons/data.o src/cons/xdata.o src/cons/oids.o \
+              src/cons/choices.o src/cons/slotmaps.o \
+	      src/cons/io.o src/cons/hash.o \
+	      src/os/except.o src/os/fdprintf.o src/os/i18n.o \
+	      src/os/fdmalloc.o src/os/network.o \
+	      src/os/envfns.o src/os/timefns.o src/os/filefns.o
+
+FRAMERD_HEADERS= include/fdeval.h \
+		 include/framerd.h \
+		 include/framerd/framerd.h \
+		 include/framerd/odb.h \
+		 include/framerd/index.h \
+		 include/framerd/search.h \
+		 src/os/chardata.h src/os/charsets.h 
+FRAMERD_OBJECTS=src/odb/libframerd.o \
+		src/odb/file-pool.o src/odb/network-pool.o \
+	        src/odb/pools.o src/odb/super-pool.o \
+                src/odb/odb.o src/odb/frames.o \
+		src/index/index.o src/index/portahash.o \
+                src/index/network-index.o src/index/file-index.o \
+                src/index/search.o
+FDEVAL_HEADERS=include/framerd/eval.h
+FDEVAL_OBJECTS=	src/eval/eval.o src/eval/sandbox.o src/eval/lambda.o \
+		src/eval/ndeval.o src/eval/threads.o src/eval/mini.o \
+		src/eval/load.o src/eval/modules.o src/eval/libfdeval.o 
+
+FDSCRIPT_HEADERS=include/fdscript.h include/framerd/fdscript.h \
+		 src/scheme/ansidecl.h src/scheme/bignum.h src/scheme/bignmint.h
+FDSCRIPT_OBJECTS=src/scheme/reflect.o src/scheme/special.o \
+		 src/scheme/arith.o src/scheme/bignum.o \
+		 src/scheme/pairs.o src/scheme/cxr.o src/scheme/records.o \
+		 src/scheme/characters.o src/scheme/strings.o \
+		 src/scheme/ioprims.o src/scheme/libfdscheme.o \
+		 src/fdscript/seq.o src/fdscript/prims.o src/fdscript/printout.o \
+		 src/fdscript/osprims.o src/fdscript/hashprims.o \
+		 src/fdscript/framerd.o src/fdscript/maint.o \
+		 src/fdscript/libfdscript.o 
+
+CORE_HEADERS=    $(DTYPES_HEADERS) $(FRAMERD_HEADERS) $(FDEVAL_HEADERS) $(FDSCRIPT_HEADERS)
+
+FDTEXT_HEADERS=  include/fdtext.h include/framerd/fdtext.h src/text/md5.h
+FDTEXT_OBJECTS=	 src/text/text.o src/text/match.o src/text/md5c.o \
+		 src/text/stem.o src/text/getnames.o 
+FDWWW_HEADERS=   include/fdwww.h include/framerd/fdwww.h
+FDWWW_OBJECTS=	 src/text/www.o src/text/htmlgen.o src/text/mime.o \
+                 src/text/xml.o src/text/xmleval.o 
+MISC_HEADERS=    include/framerd/server.h include/framerd/indextools.h
+MISC_OBJECTS=    src/misc/cgiparse.o src/misc/server.o src/misc/console.o \
+                 src/misc/indextools.o
+
+C_HEADERS =  $(DTYPES_HEADERS) $(FRAMERD_HEADERS) $(FDSCRIPT_HEADERS) \
+	     $(FDEVAL_HEADERS) $(FDTEXT_HEADERS) $(FDWWW_HEADERS) \
+	     $(MISC_HEADERS)
+C_SOURCES =  include/framerd/config.h.in \
+	     src/cons/*.c src/os/*.h src/os/*.c src/odb/*.c src/index/*.c \
+	     src/eval/*.c src/scheme/*.c src/fdscript/*.c src/text/*.c \
+	     src/misc/*.c src/exe/*.c 
+SOURCES =    makefile.in version.major version.minor version.release \
+	     $(C_SOURCES) $(C_HEADERS) \
+	     tests/*.scm tests/*.sh tests/*.txt tests/*.dtype tests/*.fdz \
+             tests/i18n tests/xmldoc.xml scripts/*.in bin/.gdbinit
+DOCS=	     docs/*.html docs/*.png docs/*.css \
+             docs/man/*.1 docs/man/*.7 docs/man/*.8 docs/man/*.4
+ETC=	     etc/setup.fdx \
+	     etc/fdscript.el etc/compile-for-elisp.el \
+             etc/install-fdscript.el etc/build-api-doc.fdx \
+             etc/fdstopserver etc/fdresetserver \
+	     etc/fdstartserver.in etc/framerd.in etc/fdservctl \
+	     etc/installer.in etc/fdxs.in etc/fdbatchjob.in \
+	     etc/config.guess etc/config.sub etc/install-sh \
+	     etc/find_init_d.sh etc/get_framerd_group.sh
+MODULES=     modules/load-utils.fdx  modules/server-utils.fdx \
+             modules/timespecs.fdx modules/index-plus.fdx modules/vpools.fdx \
+             modules/brico.fdx modules/brico-methods.fdx \
+             modules/fd4web.fdx modules/fd4web.css modules/fakecgi.fdx \
+             modules/mt-utils.fdx modules/urlfns.fdx modules/tinygis.fdx
+CMODULES=    
+
+ENCODINGS=etc/encodings/BIG5 etc/encodings/GB2312 etc/encodings/SHIFT_JIS \
+          etc/encodings/EUC-KR etc/encodings/EUC-JP etc/encodings/EUC-TW \
+          etc/encodings/KOI8R
+
+# Target declarations
+
+DTYPE_EXECUTABLES=\
+  bin/dtcall bin/print-dtype bin/make-dtype 
+FRAMERD_EXECUTABLES=\
+  bin/analyze-index bin/repack-file-index \
+  bin/repack-file-pool bin/copy-index
+FDSCRIPT_EXECUTABLES=\
+  bin/fdscript bin/fdserver bin/fdcgi bin/fdxml \
+  bin/fdservlet
+ALL_EXECUTABLES= bin/fdmanager bin/fdupdate \
+		 $(DTYPE_EXECUTABLES) \
+		 $(FRAMERD_EXECUTABLES) \
+		 $(FDSCRIPT_EXECUTABLES)
+
+SCRIPTS        = etc/fdxs etc/fdbatchjob \
+		 scripts/fd_get scripts/fd_find scripts/fd_make \
+                 scripts/fdd scripts/fdconfig scripts/fd_id \
+                 scripts/fd_add scripts/fd_drop scripts/fd_test \
+                 scripts/make-file-pool scripts/make-file-index \
+	         scripts/reset-file-pool scripts/reset-file-index \
+	         scripts/file-pool-data scripts/compare-file-pools \
+	         scripts/list-file-pool scripts/index-load \
+		 scripts/pool-diff
+SYSTEM_SCRIPTS = scripts/make-super-pool \
+	 	 scripts/rebase-file-pool scripts/rebase-file-index
+SERVER_SCRIPTS = etc/fdservctl # etc/fdstopserver etc/fdresetserver
+
+all: executables @TAGS_TARGET@ @COMPILE_ELISP@
+lib:
+	if (test ! -d lib) then mkdir lib; fi
+mfdscript: bin/mfdscript
+
+executables: $(ALL_EXECUTABLES)
+$(DTYPE_EXECUTABLES): lib/$(DTYPES_LIB)
+$(FRAMERD_EXECUTABLES): lib/$(DTYPES_LIB) lib/$(FRAMERD_LIB)
+$(FDSCRIPT_EXECUTABLES): lib/$(DTYPES_LIB) lib/$(FRAMERD_LIB) lib/$(FDSCRIPT_LIB) \
+                         lib/$(FDTEXT_LIB) lib/$(FDWWW_LIB)
+bin/fdmanager bin/fdupdate: lib/$(DTYPES_LIB)
+
+# Distribution targets
+
+bin-dist: ${ALL_EXECUTABLES} @BASELIBS@ \
+          ${SCRIPTS} ${SERVER_SCRIPTS} ${SYSTEM_SCRIPTS} etc/installer
+	chmod a+x etc/installer
+	tar -czf framerd-$(FD_VERSION)-@host@.tar.gz \
+            ${ALL_EXECUTABLES} @BASELIBS@ \
+            ${SCRIPTS} ${SERVER_SCRIPTS} ${SYSTEM_SCRIPTS} \
+	    ${DOCS} ${MODULES} etc/fdscript.el \
+            etc/setup.fdx etc/installer
+
+src-dist: $(SOURCES) $(ETC) $(DOCS) $(MODULES) $(ENCODINGS) \
+	  TAGS BUILD INSTALL LICENSE bin/.gdbinit \
+          version.major version.minor version.release \
+          configure configure.in
+	if (test ! -d dist) then mkdir dist; fi
+	rm -rf dist/framerd-$(FD_MAJOR).$(FD_MINOR).$(FD_RELEASE)
+	mkdir dist/framerd-$(FD_MAJOR).$(FD_MINOR).$(FD_RELEASE)
+	date > dist/framerd-$(FD_MAJOR).$(FD_MINOR).$(FD_RELEASE)/timestamp
+	mkdir dist/framerd-$(FD_MAJOR).$(FD_MINOR).$(FD_RELEASE)/lib
+	tar -cf dist/src-tmp.tar \
+	       $(SOURCES) $(ETC) $(DOCS) $(MODULES) $(ENCODINGS) \
+	       BUILD INSTALL LICENSE TAGS \
+               version.major version.minor version.release \
+	       bin/.gdbinit configure configure.in
+	cd dist/framerd-$(FD_RELEASEID); tar -xf ../src-tmp.tar
+	# Fix CVS breakage
+	chmod a-x dist/framerd-$(FD_RELEASEID)/etc/fdscript.el
+	cd dist; tar -cvf ../framerd-$(FD_VERSION).tar framerd-$(FD_RELEASEID)
+	rm -rf dist/src-tmp.tar dist/framerd-$(FD_VERSION)
+	gzip -f framerd-$(FD_VERSION).tar
+	rm -f framerd-$(FD_RELEASEID).tar.gz
+	ln -sf framerd-$(FD_VERSION).tar.gz framerd-$(FD_RELEASEID).tar.gz
+
+configure: configure.in
+	autoconf
+
+dist: bin-dist src-dist
+
+TAGS: $(SOURCES)
+	etags $^
+etc/framerd.pot: $(C_SOURCES)
+	xgettext -oetc/framerd.pot -k_ $^
+
+# Library targets
+
+lib/libdtypes.a: $(DTYPES_OBJECTS)
+	ar ru lib/libdtypes.a $(DTYPES_OBJECTS)
+	$(RANLIB) lib/libdtypes.a
+lib/libdtypes.so.$(DTYPES_VERSION): $(DTYPES_OBJECTS)
+	$(CC) -shared -Wl,-soname=libdtypes.so.$(DTYPES_VERSION) $(LDFLAGS) \
+              -o $@ $(DTYPES_OBJECTS)
+	ln -sf libdtypes.so.$(DTYPES_VERSION) lib/libdtypes.so
+lib/libdtypes.$(DTYPES_VERSION).dylib: $(DTYPES_OBJECTS)
+	libtool -dynamic -single_module -prebind $(LDFLAGS) $(LIBS) -lgcc \
+		-current_version $(DTYPES_VERSION) -compatibility_version $(DTYPES_COMPAT_VERSION) \
+	        -o $@ -install_name libdtypes.$(DTYPES_VERSION).dylib $(DTYPES_OBJECTS)
+	ln -sf libdtypes.dylib.$(DTYPES_VERSION) lib/libdtypes.dylib
+
+lib/libframerd.a: $(FRAMERD_OBJECTS) $(FDEVAL_OBJECTS)
+	ar ru lib/libframerd.a $(FRAMERD_OBJECTS) $(FDEVAL_OBJECTS)
+	$(RANLIB) lib/libframerd.a
+lib/libframerd.so.$(FRAMERD_VERSION): $(FRAMERD_OBJECTS) $(FDEVAL_OBJECTS)
+	$(CC) -shared -Wl,-soname=libframerd.so.$(FRAMERD_VERSION) $(LDFLAGS) \
+              -o $@ $(FRAMERD_OBJECTS) $(FDEVAL_OBJECTS) 
+	ln -sf libframerd.so.$(FRAMERD_VERSION) lib/libframerd.so
+lib/libframerd.$(FRAMERD_VERSION).dylib: $(FRAMERD_OBJECTS) $(FDEVAL_OBJECTS)
+	libtool -dynamic -single_module -prebind $(LDFLAGS) $(LIBS) -lgcc \
+		-current_version $(FRAMERD_VERSION) -compatibility_version $(FRAMERD_COMPAT_VERSION) \
+                -o $@ -install_name libframerd.$(FRAMERD_VERSION).dylib \
+                $(FRAMERD_OBJECTS) $(FDEVAL_OBJECTS) lib/$(DTYPES_LIB)
+	ln -sf libframerd.dylib.$(FRAMERD_VERSION) lib/libframerd.dylib
+
+lib/libfdscript.a: $(FDSCRIPT_OBJECTS)
+	ar ru lib/libfdscript.a $(FDSCRIPT_OBJECTS)
+	$(RANLIB) lib/libfdscript.a
+lib/libfdscript.so.$(FDSCRIPT_VERSION): $(FDSCRIPT_OBJECTS)
+	$(CC) -shared -Wl,-soname=libfdscript.so.$(FDSCRIPT_VERSION) $(LDFLAGS) \
+              -o $@ $(FDSCRIPT_OBJECTS) -ldtypes -lframerd
+	ln -sf libfdscript.so.$(FDSCRIPT_VERSION) lib/libfdscript.so
+lib/libfdscript.$(FDSCRIPT_VERSION).dylib: $(FDSCRIPT_OBJECTS)
+	libtool -dynamic -single_module -prebind $(LDFLAGS) $(LIBS) -lgcc \
+		-current_version $(FDSCRIPT_VERSION) -compatibility_version $(FDSCRIPT_COMPAT_VERSION) \
+                -o $@ -install_name libfdscript.$(FDSCRIPT_VERSION).dylib \
+                $(FDSCRIPT_OBJECTS)  lib/$(DTYPES_LIB) lib/$(FRAMERD_LIB)
+	ln -sf libfdscript.dylib.$(FDSCRIPT_VERSION) lib/libfdscript.dylib
+
+lib/libfdtext.a: $(FDTEXT_OBJECTS)
+	ar ru lib/libfdtext.a $(FDTEXT_OBJECTS)
+	$(RANLIB) lib/libfdtext.a
+lib/libfdtext.so.$(FDTEXT_VERSION): $(FDTEXT_OBJECTS)
+	$(CC) -shared -Wl,-soname=libfdtext.so.$(FDTEXT_VERSION) $(LDFLAGS) \
+              -o $@ $(FDTEXT_OBJECTS) -ldtypes -lframerd -lfdscript
+	ln -sf libfdtext.so.$(FDTEXT_VERSION) lib/libfdtext.so
+lib/libfdtext.$(FDTEXT_VERSION).dylib: $(FDTEXT_OBJECTS)
+	libtool -dynamic -single_module -prebind $(LDFLAGS) $(LIBS) -lgcc \
+		-current_version $(FDTEXT_VERSION) -compatibility_version $(FDTEXT_COMPAT_VERSION) \
+                -o $@ -install_name libfdtext.$(FDTEXT_VERSION).dylib \
+	   $(FDTEXT_OBJECTS) lib/$(DTYPES_LIB) lib/$(FRAMERD_LIB) lib/$(FDSCRIPT_LIB)
+	ln -sf libfdtext.dylib.$(FDTEXT_VERSION) lib/libfdtext.dylib
+
+lib/libfdwww.a: $(FDWWW_OBJECTS)
+	ar ru lib/libfdwww.a $(FDWWW_OBJECTS)
+	$(RANLIB) lib/libfdwww.a
+lib/libfdwww.so.$(FDWWW_VERSION): $(FDWWW_OBJECTS)
+	$(CC) -shared -Wl,-soname=libfdwww.so.$(FDWWW_VERSION) $(LDFLAGS) \
+              -o $@ $(FDWWW_OBJECTS) -ldtypes -lframerd -lfdscript
+	ln -sf libfdwww.so.$(FDWWW_VERSION) lib/libfdwww.so
+lib/libfdwww.$(FDWWW_VERSION).dylib: $(FDWWW_OBJECTS)
+	libtool -dynamic -single_module -prebind $(LDFLAGS) $(LIBS) -lgcc \
+		-current_version $(FDTEXT_VERSION) -compatibility_version $(FDTEXT_COMPAT_VERSION) \
+                -o $@ -install_name libfdwww.$(FDTEXT_VERSION).dylib \
+	        $(FDWWW_OBJECTS) lib/$(DTYPES_LIB) lib/$(FRAMERD_LIB) lib/$(FDSCRIPT_LIB)
+	ln -sf libfdwww.dylib.$(FDWWW_VERSION) lib/libfdwww.dylib
+
+# Executable targets
+
+bin/make-dtype: src/exe/make-dtype.c lib/$(DTYPES_LIB)
+	$(MAKEBIN) -o $@ $< $(LIBS) -ldtypes
+bin/print-dtype: src/exe/print-dtype.c lib/$(DTYPES_LIB)
+	$(MAKEBIN) -o $@ $< $(LIBS) -ldtypes
+bin/dtcall: src/exe/dtcall.c lib/$(DTYPES_LIB)
+	$(MAKEBIN) -o $@ $< $(LIBS) -ldtypes
+
+bin/pool-get: src/exe/pool-get.c lib/$(DTYPES_LIB) lib/$(FRAMERD_LIB)
+	$(MAKEBIN) -o $@ $< $(LIBS) -lframerd -ldtypes
+bin/index-get: src/exe/index-get.c lib/$(DTYPES_LIB) lib/$(FRAMERD_LIB)
+	$(MAKEBIN) -o $@ $< $(LIBS) -lframerd -ldtypes
+bin/analyze-index: src/exe/analyze-index.c src/misc/indextools.o lib/$(DTYPES_LIB) lib/$(FRAMERD_LIB)
+	$(MAKEBIN) -o $@ $< src/misc/indextools.o $(LIBS) -lframerd -ldtypes
+bin/repack-file-index: src/exe/repack-file-index.c src/misc/indextools.o lib/$(DTYPES_LIB) lib/$(FRAMERD_LIB)
+	$(MAKEBIN) -o $@ $< src/misc/indextools.o $(LIBS) -lframerd -ldtypes
+bin/repack-file-pool: src/exe/repack-file-pool.c lib/$(DTYPES_LIB) lib/$(FRAMERD_LIB)
+	$(MAKEBIN) -o $@ $< $(LIBS) -lframerd -ldtypes
+bin/copy-index: src/exe/copy-index.c lib/$(DTYPES_LIB) lib/$(FRAMERD_LIB)
+	$(MAKEBIN) -o $@ $< $(LIBS) -lframerd -ldtypes
+
+bin/fdscript: src/exe/fdscript.c src/misc/console.o @console_libs@ \
+	      lib/$(DTYPES_LIB) lib/$(FRAMERD_LIB) lib/$(FDSCRIPT_LIB) lib/$(FDTEXT_LIB) lib/$(FDWWW_LIB)
+	$(MAKEBIN) -o $@ $<  src/misc/console.o $(LIBS) \
+	           -lfdtext -lfdwww -lfdscript -lframerd -ldtypes @console_libs@
+bin/fdserver: src/exe/fdserver.c src/misc/server.o \
+	      lib/$(DTYPES_LIB) lib/$(FRAMERD_LIB) lib/$(FDSCRIPT_LIB) lib/$(FDTEXT_LIB) lib/$(FDWWW_LIB)
+	$(MAKEBIN) -o $@ $< src/misc/server.o $(LIBS) -lfdtext -lfdwww -lfdscript -lframerd -ldtypes
+
+bin/fdmanager: src/exe/fdmanager.c lib/$(DTYPES_LIB)
+	$(MAKEBIN) -o $@ $< $(LIBS) -ldtypes
+bin/fdupdate: src/exe/fdupdate.c lib/$(DTYPES_LIB)
+	$(MAKEBIN) -o $@ $< $(LIBS) -ldtypes
+
+bin/fdcgi: src/exe/fdcgi.c src/misc/cgiparse.o \
+           lib/$(DTYPES_LIB) lib/$(FRAMERD_LIB) lib/$(FDSCRIPT_LIB) lib/$(FDTEXT_LIB) lib/$(FDWWW_LIB)
+	$(MAKEBIN) -o $@ $< src/misc/cgiparse.o $(LIBS) \
+		   -lfdtext -lfdwww -lfdscript -lframerd -ldtypes
+bin/fdxml: src/exe/fdxml.c src/misc/cgiparse.o \
+           lib/$(DTYPES_LIB) lib/$(FRAMERD_LIB) lib/$(FDSCRIPT_LIB) lib/$(FDTEXT_LIB) lib/$(FDWWW_LIB)
+	$(MAKEBIN) -o $@ $< src/misc/cgiparse.o $(LIBS) \
+		   -lfdtext -lfdwww -lfdscript -lframerd -ldtypes
+bin/fdservlet: src/exe/fdservlet.c src/misc/cgiparse.o \
+              lib/$(DTYPES_LIB) lib/$(FRAMERD_LIB) lib/$(FDSCRIPT_LIB) lib/$(FDTEXT_LIB) lib/$(FDWWW_LIB)
+	$(MAKEBIN) -o $@ $< src/misc/cgiparse.o $(LIBS) \
+		   -lfdtext -lfdwww -lfdscript -lframerd -ldtypes
+# Monolithic FDScript (useful for profiling)
+bin/mfdscript: src/exe/fdscript.c src/exe/console.c \
+		     $(DTYPES_OBJECTS) $(FRAMERD_OBJECTS) $(FDEVAL_OBJECTS) \
+		     $(FDSCRIPT_OBJECTS) $(FDTEXT_OBJECTS) $(FDWWW_OBJECTS)
+	$(MAKEBIN) -o $@ $^ $(LIBS)
+
+modules/mod_fdserv.so: modules/mod_fdserv.c
+	cd modules; $(APXS) -c mod_fdserv.c
+
+install-fdserv:
+	cd modules; make APXS=$(APXS) install-fdserv
+fdserv-install: install-fdserv # legacy
+
+# Maintenance targets
+
+SCRIPTS=etc/installer etc/fdstartserver etc/framerd etc/fdxs etc/fdbatchjob \
+	scripts/fdconfig scripts/fd_add scripts/fd_drop scripts/fd_find \
+        scripts/fd_get scripts/fd_test scripts/fd_id scripts/fd_make \
+        scripts/fdd scripts/make-super-pool scripts/register-super-pool \
+        scripts/make-file-pool scripts/reset-file-pool \
+        scripts/make-file-index scripts/reset-file-index \
+        scripts/unzipf-file-index scripts/index-load \
+        scripts/list-file-pool scripts/file-pool-data \
+        scripts/rebase-file-pool  scripts/rebase-file-index \
+        scripts/compare-file-pools scripts/pool-diff
+
+distclean: clean test-clean
+	$(CLEAN) config.cache config.status include/framerd/config.h
+	$(CLEAN) include/framerd/makefile makefile
+	$(CLEAN) $(SCRIPTS)
+	$(CLEAN) etc/fdstartserver etc/fdstartall
+	$(CLEAN) etc/installed-files etc/init.d.framerd
+	$(CLEAN) test.log config.log TAGS
+
+test-clean:
+	cd tests; $(CLEAN) dbtest.pool dbtest.files dbtest.symbols
+	cd tests; $(CLEAN) test.index dbtest.index dbtest.autoindex
+	cd tests; $(CLEAN) tmp1 tmp2 tmp3 u1 u2
+	cd tests; $(CLEAN) fakedb.pool fakedb.index
+	cd tests; $(CLEAN) fdtemp.locks fdtemp.pid
+
+clean: tidy
+	$(CLEAN) $(DTYPE_EXECUTABLES) $(DTYPES_LIB)
+	$(CLEAN) $(FRAMERD_EXECUTABLES) $(FRAMERD_LIB)
+	$(CLEAN) $(FDSCRIPT_EXECUTABLES) $(FDSCRIPT_LIB) $(FDTEXT_LIB) $(FDWWW_LIB)
+	$(CLEAN) bin/fdmanager bin/fdupdate 
+	$(CLEAN) lib/*.so* lib/*.dylib* lib/*.a*
+	$(CLEAN) etc/fdscript.elc include/buildstamp.h
+
+tidy: test-clean
+	$(CLEAN) $(DTYPES_OBJECTS)
+	$(CLEAN) $(FRAMERD_OBJECTS)
+	$(CLEAN) $(FDEVAL_OBJECTS)
+	$(CLEAN) $(FDSCRIPT_OBJECTS)
+	$(CLEAN) $(FDTEXT_OBJECTS)
+	$(CLEAN) $(FDWWW_OBJECTS)
+	$(CLEAN) $(MISC_OBJECTS)
+	$(CLEAN) core bin/core lib/core tests/core
+	$(CLEAN) src/cons/*~ src/os/*~ src/odb/*~ src/index/*~
+	$(CLEAN) src/eval/*~ src/scheme/*~ src/fdscript/*~ 
+	$(CLEAN) src/misc/*~ src/exe/*~
+	$(CLEAN) *~ etc/*~ docs/*~ scripts/*~
+	$(CLEAN) include/*~ include/framerd/*~
+	rm -rf etc/zaurus$(prefix)
+
+# test targets
+
+dbtest: all
+	cd tests; $(SFDSCRIPT) do-dbtest.scm 2>&1 | tee -a ../test.log | grep " === "
+	cd tests; sh after-dbtest.sh
+
+server-test: all
+	cd tests; @shared_lib_path@=../lib:${@shared_lib_path@} bash server-test.sh | tee -a ../test.log | grep " === "
+
+dbtest-net: all
+	cd tests; @shared_lib_path@=../lib:${@shared_lib_path@} bash dbtest-net.sh
+
+simple-test: all test-clean
+	cd tests; $(SFDSCRIPT) alltest.scm 2>&1 | tee ../test.log | grep " === " 
+	@if (test -f tests/alltest.running) then echo "!!! #%@!&#! alltest didn't finish normally!"; fi
+	@if (test ! -f tests/alltest.running) then echo "!!! alltest finished normally!"; fi
+
+test: all test-clean
+	$(MAKE) simple-test
+	$(MAKE) dbtest
+	cd tests; $(SFDSCRIPT) fakedb.scm make | tee -a ../test.log | grep " === "
+	cd tests; $(SFDSCRIPT) fakedb.scm test | tee -a ../test.log | grep " === "
+	$(MAKE) server-test
+
+# install targets
+
+install-shared-libs: all $(LIBINSTALLDIR)
+	$(INSTALLDIR) $(LIBINSTALLDIR)
+	$(INSTALLLIB) lib/$(DTYPES_LIB) lib/$(FRAMERD_LIB) lib/$(FDSCRIPT_LIB) \
+                      lib/$(FDTEXT_LIB) lib/$(FDWWW_LIB) \
+           $(LIBINSTALLDIR)
+	ln -sf $(DTYPES_LIB) $(LIBINSTALLDIR)/libdtypes.@lib_suffix@
+	ln -sf $(FRAMERD_LIB) $(LIBINSTALLDIR)/libframerd.@lib_suffix@
+	ln -sf $(FDSCRIPT_LIB) $(LIBINSTALLDIR)/libfdscript.@lib_suffix@
+	ln -sf $(FDTEXT_LIB) $(LIBINSTALLDIR)/libfdtext.@lib_suffix@
+	ln -sf $(FDWWW_LIB) $(LIBINSTALLDIR)/libfdwww.@lib_suffix@
+
+install-static-libs:
+	$(INSTALLDIR) $(LIBINSTALLDIR)
+	$(INSTALLLIB) lib/$(DTYPES_LIB) lib/$(FRAMERD_LIB) lib/$(FDSCRIPT_LIB) \
+                      lib/$(FDTEXT_LIB) lib/$(FDWWW_LIB) \
+           $(LIBINSTALLDIR)
+@ifmacosx@	$(RANLIB) $(LIBINSTALLDIR)/$(DTYPES_LIB)
+@ifmacosx@	$(RANLIB) $(LIBINSTALLDIR)/$(FRAMERD_LIB)
+@ifmacosx@	$(RANLIB) $(LIBINSTALLDIR)/$(FDSCRIPT_LIB)
+@ifmacosx@	$(RANLIB) $(LIBINSTALLDIR)/$(FDTEXT_LIB)
+@ifmacosx@	$(RANLIB) $(LIBINSTALLDIR)/$(FDWWW_LIB)
+
+install-executables: all $(BININSTALLDIR) @install_libs@
+	$(INSTALLDIR) $(BININSTALLDIR)
+	$(INSTALLBIN) $(ALL_EXECUTABLES) $(BININSTALLDIR)
+
+install-scripts: all $(BININSTALLDIR) $(SBININSTALLDIR)
+	$(INSTALLDIR) $(BININSTALLDIR)
+	$(INSTALLEXE) $(SCRIPTS) $(BININSTALLDIR)
+	$(INSTALLEXE) $(SERVER_SCRIPTS) $(SBININSTALLDIR)
+	$(INSTALLEXE) $(SYSTEM_SCRIPTS) $(SBININSTALLDIR)
+install-init.d: $(DESTDIR)$(INIT_DIR)
+	if test -w $(DESTDIR)$(INIT_DIR); then $(INSTALLEXE) etc/framerd $(DESTDIR)$(INIT_DIR); fi
+$(DESTDIR)$(INIT_DIR):
+	$(INSTALLDIR) $(DESTDIR)$(INIT_DIR) 
+
+$(MANDIR)/man1:
+	$(INSTALLDIR) $(MANDIR)/man1
+$(MANDIR)/man4:
+	$(INSTALLDIR) $(MANDIR)/man4
+$(MANDIR)/man7:
+	$(INSTALLDIR) $(MANDIR)/man7
+$(MANDIR)/man8:
+	$(INSTALLDIR) $(MANDIR)/man8
+
+install-man: $(MANDIR)/man1 $(MANDIR)/man4 $(MANDIR)/man7 $(MANDIR)/man8
+	$(INSTALLDATA) docs/man/*.1 $(MANDIR)/man1
+	$(INSTALLDATA) docs/man/*.4 $(MANDIR)/man4
+	$(INSTALLDATA) docs/man/*.7 $(MANDIR)/man7
+	$(INSTALLDATA) docs/man/*.8 $(MANDIR)/man8
+
+install-encodings: $(INSTALLROOT)/share/framerd/encodings bin/fdupdate
+	$(FDUPDATE) $(INSTALLROOT)/share/framerd/encodings $(ENCODINGS)
+install-fdscript-modules: $(INSTALLROOT)/share/framerd/modules bin/fdupdate
+	$(FDUPDATE) $(INSTALLROOT)/share/framerd/modules ${MODULES}
+install-c-modules: $(INSTALLROOT)/share/framerd/lib
+#	$(INSTALLDATA) $(INSTALLROOT)/share/framerd/lib ${CMODULES} 
+install-modules: install-fdscript-modules install-c-modules
+install-headers: $(INSTALLROOT)/include/framerd-$(FD_MAJOR).$(FD_MINOR)
+	$(INSTALLDATA) include/framerd/*.h \
+		   $(INSTALLROOT)/include/framerd-$(FD_MAJOR).$(FD_MINOR)
+	rm -f $(INSTALLROOT)/include/framerd
+	ln -sf @exec_prefix@/include/framerd-$(FD_MAJOR).$(FD_MINOR) \
+	       $(INSTALLROOT)/include/framerd
+install-docs: $(INSTALLROOT)/share/doc/framerd install-man
+	$(INSTALLDATA) docs/*.html docs/*.css docs/*.png \
+                       $(INSTALLROOT)/share/doc/framerd
+
+etc/fdscript.elc: etc/fdscript.el
+	emacs -batch -q --no-site-file -l etc/install-fdscript.el \
+              -f fdscript-compile
+install-elisp-cleverly: etc/fdscript.elc
+	emacs -batch -q --no-site-file -l etc/install-fdscript.el \
+              -f fdscript-install
+
+install-elisp-blindly: $(DESTDIR)@elispdir@/framerd bin/fdupdate
+	$(FDUPDATE) $(DESTDIR)@elispdir@/framerd etc/fdscript.el
+                       
+$(DESTDIR)@elispdir@/framerd:
+	$(INSTALLDIR) $(DESTDIR)@elispdir@/framerd
+
+install-core: @install_libs@ install-executables install-scripts install-modules
+install-extras: install-headers install-docs install-modules
+install-etc: etc/fdscript.elc $(INSTALLDIR)/share/framerd/etc bin/fdupdate
+	$(FDUPDATE) $(INSTALLROOT)/share/framerd/etc \
+                    etc/fdscript.el etc/fdscript.elc etc/setup.fdx 
+	$(FDUPDATE) $(INSTALLROOT)/share/framerd/etc/init.d-framerd etc/framerd
+$(INSTALLDIR)/share/framerd/etc:
+	$(INSTALLDIR) $(INSTALLROOT)/share/framerd/etc
+
+install: install-core install-extras
+	$(XFDSCRIPT) etc/setup.fdx $(INSTALLROOT)/share/framerd
+framerd_2.$(FD_MAJOR).$(FD_MINOR)_arm.ipk: \
+    all etc/zaurus/CONTROL/control etc/zaurus/CONTROL/postinst
+	rm -rf etc/zaurus/usr
+	make DESTDIR=etc/zaurus install-core 
+	install -D -m0755 etc/setup.fdx etc/zaurus$(prefix)/sbin/framerd-setup
+	etc/ipkg-build.sh etc/zaurus .
+ipk: framerd_2.$(FD_MAJOR).$(FD_MINOR)_arm.ipk
+
+dist/osx/Package_Root:
+	install -d dist/osx/Package_Root
+dist/osx/Resources:
+	install -d dist/osx/Resources
+distosx: dist/osx/Package_Root dist/osx/Resources
+	make DESTDIR=dist/osx/Package_Root "INSTALL=/usr/bin/install -c" \
+	     install-core install-extras install-etc
+	cat LICENSE GPL LGPL > dist/osx/Resources/License.txt
+	cat ABOUT NEWS > dist/osx/Resources/README.txt
+	cat ABOUT > dist/osx/Resources/WELCOME.txt
+	cp etc/postflight dist/osx/Resources/PostFlight
+	chmod a+x dist/osx/Resources/PostFlight
+dist/FramerD/FramerD.pkg: $(ALL_EXECUTABLES) \
+	          lib/libdtypes.$(DTYPES_VERSION).dylib \
+	          lib/libframerd.$(FRAMERD_VERSION).dylib \
+	          lib/libfdscript.$(FDSCRIPT_VERSION).dylib \
+	          lib/libfdtext.$(FDTEXT_VERSION).dylib
+	$(INSTALLDIR) dist/FramerD/
+	make distosx
+	$(PACKAGE_MAKER) -build \
+	     -p "$(HERE)/dist/FramerD/FramerD.pkg" \
+	     -f $(HERE)/dist/osx/Package_Root \
+	     -r $(HERE)/dist/osx/Resources \
+	     -i $(HERE)/etc/Info.plist \
+	     -d $(HERE)/etc/Description.plist; echo "Done making package"
+dist/FramerD.dmg: dist/FramerD/FramerD.pkg
+	hdiutil create -srcfolder "dist/FramerD" dist/FramerD.dmg
+
+$(BININSTALLDIR):
+	$(INSTALLDIR) $(BININSTALLDIR)
+
+$(LIBINSTALLDIR):
+	$(INSTALLDIR) $(LIBINSTALLDIR)
+
+$(SBININSTALLDIR):
+	$(INSTALLDIR) $(SBININSTALLDIR)
+
+$(INSTALLROOT)/share/doc/framerd:
+	$(INSTALLDIR) $(INSTALLROOT)/share/doc/framerd
+
+$(INSTALLROOT)/include/framerd-$(FD_MAJOR).$(FD_MINOR):
+	$(INSTALLDIR) $(INSTALLROOT)/include/framerd-$(FD_MAJOR).$(FD_MINOR)
+
+$(INSTALLROOT)/share/framerd/modules:
+	$(INSTALLDIR) $(INSTALLROOT)/share/framerd/modules
+
+$(INSTALLROOT)/share/framerd/lib:
+	$(INSTALLDIR) $(INSTALLROOT)/share/framerd/lib
+
+$(INSTALLROOT)/share/framerd/encodings:
+	$(INSTALLDIR) $(INSTALLROOT)/share/framerd/encodings
+
+# Dependencies on header files
+
+src/os/envfns.o: include/buildstamp.h
+src/os/i18n.o: src/os/charsets.h src/os/chardata.h
+src/text/md5c.o: src/text/md5.h
+
+$(DTYPES_OBJECTS): $(DTYPES_HEADERS)
+$(FRAMERD_OBJECTS): $(DTYPES_HEADERS) $(FRAMERD_HEADERS)
+$(FDEVAL_OBJECTS):  $(DTYPES_HEADERS) $(FRAMERD_HEADERS) $(FDEVAL_HEADERS)
+$(FDSCRIPT_OBJECTS) $(FDEVAL_OBJECTS): $(CORE_HEADERS)
+$(FDTEXT_OBJECTS): $(CORE_HEADERS) $(FDTEXT_HEADERS)
+$(FDWWW_OBJECTS): $(CORE_HEADERS) $(FDTEXT_HEADERS) $(FDWWW_HEADERS)
+
+src/misc/indextools.o: $(DTYPES_HEADERS) $(FRAMERD_HEADERS) include/framerd/indextools.h
+src/misc/cgiparse.o: $(CORE_HEADERS) $(FDTEXT_HEADERS) $(FDWWW_HEADERS)
+src/misc/server.o: $(CORE_HEADERS) include/framerd/server.h
+
+# Buildstamp target
+
+include/buildstamp.h: $(C_HEADERS) $(C_SOURCES)
+	echo Checking buildstamp
+	echo "#define FD_BUILDSTAMP" `date +"%Y%m%d"` > include/buildstamp.h.tmp
+	if test "`cat include/buildstamp.h.tmp`" != "`cat include/buildstamp.h`";\
+	   then echo Updating buildstamp.h; \
+                mv include/buildstamp.h.tmp include/buildstamp.h; \
+           else echo No need to update buildstamp.h; \
+                rm include/buildstamp.h.tmp; fi
+
+# Dependencies for various inclusion kludges
+
+src/os/fdmalloc.o: src/os/fdmalloc.c src/os/fdmalloc-debug.c
+src/cons/io.o: src/cons/io.c src/cons/txio.c src/cons/dtio.c
+src/cons/oids.o: src/cons/lightweight-oids.c src/cons/consed-oids.c
+
+# Special rules
+
+src/eval/arith.o: src/eval/arith.c
+	$(CC) $(CFLAGS) @arith_cflags@ -o $@ -c $<
+
+# $Log: makefile.in,v $
+# Revision 1.106  2007/06/30 15:28:46  haase
+# Renamed fdbatch to fdbatchjob
+#
+# Revision 1.105  2005/03/03 18:11:23  haase
+# Added local library option
+#
+# Revision 1.104  2005/01/16 04:30:00  haase
+# Added ABOUT text
+#
+# Revision 1.103  2005/01/16 03:22:10  haase
+# Updates to src-dist generation
+#
+# Revision 1.102  2005/01/15 23:00:01  haase
+# More OS X packaging stuff
+#
+# Revision 1.101  2005/01/15 21:42:54  haase
+# Updates for OS X packaging
+#
+# Revision 1.100  2005/01/15 04:42:10  haase
+# Fixes to shared lib usage
+#
+# Revision 1.99  2005/01/15 04:12:50  haase
+# Added files and targets for osxpkg construction
+#
+# Revision 1.98  2004/10/04 15:41:18  haase
+# Put buildstamp target back
+#
+# Revision 1.97  2004/10/04 15:28:02  haase
+# Numerous fixes for WIN32/MINGW compilation
+#
+# Revision 1.96  2004/06/09 11:41:22  haase
+# Updates to tinygis
+#
+# Revision 1.95  2004/05/03 22:49:03  haase
+# Added script removal to make distclean
+#
+# Revision 1.94  2004/04/04 15:58:15  haase
+# Added fdbatch command/shell script
+#
+# Revision 1.93  2004/03/31 21:04:11  haase
+# Various unthreaded compile fixes
+#
+# Revision 1.92  2004/03/08 11:40:30  haase
+# Made modules subdir have a makefile with its own apxs compilation targets
+#
+# Revision 1.91  2003/12/23 23:35:15  haase
+# Reorginzation configuration and makefile
+#
+# Revision 1.90  2003/12/21 14:12:39  haase
+# Fixes to configuration and makefile
+#
+# Revision 1.89  2003/12/19 23:38:20  haase
+# Make dylibs have relative install names
+#
+# Revision 1.88  2003/12/19 00:13:18  haase
+# Fixed lib installation targets
+#
+# Revision 1.87  2003/12/17 21:19:45  haase
+# Cleanup and OS X extensions
+#
+# Revision 1.86  2003/12/06 19:46:46  haase
+# Fixes to datestamp/buildstamp handling
+#
+# Revision 1.85  2003/12/05 14:56:10  haase
+# Made makefile dependencies finer grained
+#
+# Revision 1.84  2003/12/03 10:59:43  haase
+# Moved to using datestamp.h rather than datestamp
+#
+# Revision 1.83  2003/11/29 14:28:20  haase
+# Separated FDTEXT and FDWWW libraries
+#
+# Revision 1.82  2003/11/14 14:49:06  haase
+# More cleanup of fdupdate and made use of it in the makefile install targets
+#
+# Revision 1.81  2003/10/20 12:04:41  haase
+# Fixes to stopping on exceptions
+#
+# Revision 1.80  2003/10/06 11:05:26  haase
+# Added support for detailed malloc debugging
+#
+# Revision 1.79  2003/09/10 21:28:52  haase
+# Added support for writing Zaurus .ipk files
+#
+# Revision 1.78  2003/09/07 18:22:09  haase
+# Added src/text/xmleval.c for FDXML callouts
+#
+# Revision 1.77  2003/08/27 10:53:27  haase
+# Merged 2.4 patches into trunk, started 2.5
+#
+# Revision 1.76.2.3  2003/01/26 20:56:05  haase
+# Various fixes, including replaces of fd_make_string with fd_copy_string
+#
+# Revision 1.76.2.2  2002/08/13 01:25:50  haase
+# Fixed some FD_ prefix problems and added separate lib dir for binary modules
+#
+# Revision 1.76.2.1  2002/08/10 16:41:00  haase
+# Added HELPEXE and removed elisp compilation from makefile
+#
+# Revision 1.76  2002/07/26 21:23:49  haase
+# Added install-etc target
+#
+# Revision 1.75  2002/07/26 17:26:01  haase
+# Added version.release
+#
+# Revision 1.74  2002/07/26 16:30:01  haase
+# Switched over to three part version identifiers (major,minor,release)
+#
+# Revision 1.73  2002/07/26 15:41:25  haase
+# Cleaned up configure group setting
+#
+# Revision 1.72  2002/07/26 11:41:34  haase
+# Made apxs be a variable
+#
+# Revision 1.71  2002/07/25 01:45:38  haase
+# Fixed elisp installation
+#
+# Revision 1.70  2002/07/24 23:32:33  haase
+# Fix src-dist target
+#
+# Revision 1.69  2002/07/24 03:22:31  haase
+# Installation cleanups
+#
+# Revision 1.68  2002/07/24 02:57:44  haase
+# Fixed installation of docs to not use version number
+#
+# Revision 1.67  2002/07/24 02:46:19  haase
+# Cleanup includes .elc file
+#
+# Revision 1.66  2002/07/23 21:40:58  haase
+# Fixes for RPM building
+#
+# Revision 1.65  2002/07/23 04:09:13  haase
+# Installation fixes
+#
+# Revision 1.64  2002/07/21 10:56:54  haase
+# Made configure --with-readline accept static library spec
+#
+# Revision 1.63  2002/07/18 19:19:55  haase
+# Removed old readline stuff and raised abstraction level of the install macros
+#
+# Revision 1.62  2002/07/17 03:18:51  haase
+# Updated clean targets to include fdmanager and fdupdate
+#
+# Revision 1.61  2002/07/17 01:28:07  haase
+# Fixes to installation model in makefile and setup.fdx
+#
+# Revision 1.60  2002/07/16 22:58:41  haase
+# Added DESTDIR to MANDIR
+#
+# Revision 1.59  2002/07/16 22:38:47  haase
+# Fix makefile src-dist target
+#
+# Revision 1.58  2002/07/12 18:29:46  haase
+# Debian fixes
+#
+# Revision 1.57  2002/07/12 17:56:20  haase
+# Updates for debian package
+#
+# Revision 1.56  2002/07/10 01:41:36  haase
+# Fixes to fakecgi
+#
+# Revision 1.55  2002/07/02 22:26:17  haase
+# Fixes to makefile.in to install versioned directories plus unversioned links.
+#
+# Revision 1.54  2002/07/02 22:08:24  haase
+# Fixed typo
+#
+# Revision 1.53  2002/07/02 19:16:17  haase
+# Made doc-install not use version number on directory
+#
+# Revision 1.52  2002/07/01 02:38:34  haase
+# Fix static libs target to not try and install shared libs instead
+#
+# Revision 1.51  2002/06/27 01:23:02  haase
+# Fixes to shared library handling in makefile
+#
+# Revision 1.50  2002/06/26 18:30:37  haase
+# Fixes to shared library construction
+#
+# Revision 1.49  2002/06/26 02:32:28  haase
+# Reorganized install targets to simplify debian package
+#
+# Revision 1.48  2002/06/25 19:54:02  haase
+# Fixed bug in configuration script when no explicit prefix is given
+#
+# Revision 1.47  2002/06/25 17:03:35  haase
+# Rearrangements of new brico module
+#
+# Revision 1.46  2002/06/15 16:02:12  haase
+# Whitespace changes
+#
+# Revision 1.45  2002/05/29 18:45:08  haase
+# Fixes to fd4web to handle new CGI model
+#
+# Revision 1.44  2002/05/26 04:53:14  haase
+# Added fdservlet executable and mod_fdserv module
+#
+# Revision 1.43  2002/05/22 02:15:40  haase
+# Add man pages to tarball
+#
+# Revision 1.42  2002/04/25 15:04:45  haase
+# Added pool-diff script
+#
+# Revision 1.41  2002/04/24 20:25:47  haase
+# Added mt-utils module
+#
+# Revision 1.40  2002/04/24 20:06:00  haase
+# src/fdscript/framerd.c
+#
+# Revision 1.39  2002/04/12 16:04:49  haase
+# Added fdupdate, an install program which preserves link structure and group and mode information
+#
+# Revision 1.38  2002/04/10 03:01:47  haase
+# Added version information to file pools and indices
+#
+# Revision 1.37  2002/04/05 17:09:56  haase
+# Added compare-file-pools script and support
+#
+# Revision 1.36  2002/04/03 19:04:08  haase
+# Added fdservctl to tarballs
+#
+# Revision 1.35  2002/04/03 13:03:02  haase
+# Made simple-test target report directly if its test failed
+#
+# Revision 1.34  2002/04/03 12:58:42  haase
+# Added build dependencies for fdmanager
+#

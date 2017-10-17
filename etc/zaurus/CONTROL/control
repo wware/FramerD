@@ -1,0 +1,20 @@
+Package: framerd
+Priority: optional
+Section: Misc
+Version: 2.5.1
+Architecture: arm
+Maintainer: Kenneth Benefiel Haase <kh@beingmeta.com>
+Depends:
+Description: Scalable knowledge base development and application platform
+ FramerD provides a robust and scalable object database especially
+ designed and optimized for pointer-intensive semi-structured data with
+ complex or evolving data models.  FramerD includes full support for
+ Unicode in both data and programs together with powerful tools for
+ text processing and linguistic analysis.
+ FramerD natively supports reading and and generation of XML, HTML, and
+ MIME data.  Web services support has long included built-in support
+ for processing CGI requests both directly and with fastcgi.  With
+ version 2.4, FramerD comes with mod_fdserv, a lightweight extension to
+ the Apache webserver for transparently managing persistent
+ multi-threaded servlets responding to CGI requests.
+

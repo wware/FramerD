@@ -1,0 +1,14 @@
+#!@prefix@/bin/fdscript
+;; -*- Mode: fdscript; -*-
+
+;;; $Id: make-file-index.in,v 1.3 2002/04/02 21:43:06 haase Exp $
+
+(use-module 'fdmaint)
+
+(define (main filename (size 500000))
+  (make-file-index filename (parse-arg size)))
+
+;;; $Log: make-file-index.in,v $
+;;; Revision 1.3  2002/04/02 21:43:06  haase
+;;; Added Id and log entries to scripts
+;;;

@@ -1,0 +1,20 @@
+FramerD is a high-performance distributed object database optimized
+for storing and operating over large pointer-intensive data
+structures, especially those used to represent the semantic knowledge
+used in intelligent document analysis and search.
+
+Conventional databases based on relational algebra (any SQL-oriented
+product) are not optimized for pointer-intensive data, but many
+knowledge-based algorithms make heavy use of pointer-following and
+expansion over such data.  FramerD uses an alternate model supporting
+billions of *unique objects* with lightweight pointers and a range of
+caching strategies for resolving object pointers to complex structured
+objects.  This model is incorporated with the ability to manage very
+large dynamically modifiable *indices* that map arbitrary structured
+objects to collections of object references.
+
+The underlying content model is a dynamically typed data model based
+on associational structures for mapping property identifiers (which
+may themselves be object pointers) to values.  These associational
+structures are called "frames" after the term classically used for
+such entities in artificial intelligence.

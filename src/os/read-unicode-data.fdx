@@ -1,0 +1,139 @@
+;;; This file reads unicode tables and produces the character data file chardata.h
+
+;; Bit mapping
+;; alpha mathematical control punct xxxx
+(define type-codes
+  '(("Ll" 0x80)				; Letter, lowercase
+    ("Lu" 0x81)				; Letter, uppercase
+    ("Lt" 0x82)				; Letter, title case
+    ("Lm" 0x83)				; Letter, modifier
+    ("Lo" 0x84)				; Letter, other
+    ("Mn" 0x85)				; Mark, Non-Spacing
+    ("Mc" 0x86)				; Spacing Combining
+    ("Me" 0x87)				; Mark, Enclosing
+
+    ("Nd" 0x40)				; Decimal digit
+    ("Nl" 0x41)				; Number letter
+    ("No" 0x42)				; Number other
+    ("Sm" 0x54)				; Math symbol
+    ("Sc" 0x55)				; Currency symbol
+    ("Sk" 0x56)				; Modifier symbol
+    ("So" 0x57)				; Other symbol;
+
+    ("Zs" 0x20)				; Word spacing
+    ("Zl" 0x21)				; Line spacing
+    ("Zp" 0x22)				; Paragraph spacing
+    ("Cc" 0x23)				; Control, other
+    ("Cf" 0x24)				; Control, format
+    ("Cs" 0x25)				; Control, surrogate
+    ("Co" 0x26)				; Control, other
+    ("Cn" 0x27)				; Control, unassigned
+
+    ("Pc" 0x10)				; Punctuation, connector
+    ("Pd" 0x11)				; Punctuation, dash
+    ("Ps" 0x12)				; Punctuation, open
+    ("Pe" 0x13)				; Punctuation, close
+    ("Pi" 0x14)				; Punctuation, open quote
+    ("Pf" 0x15)				; Punctuation, close quote
+    ("Po" 0x16)				; Punctuation, other
+    ))
+
+(define unicode-table (make-vector 70000))
+(define (maybe-parse string code)
+  (if (> (length string) 0)
+      (string->number string 16) code))
+(define (process-line line)
+  (let* ((data (segment line ";"))
+	 (code (string->number (car data) 16))
+	 (char-type (cadr (assoc (caddr data) type-codes)))
+	 (upper (maybe-parse (elt data 12) code))
+	 (lower (maybe-parse (elt data 13) code)))
+    (when (< code 70000)
+      (vector-set! unicode-table code
+		   (vector code char-type lower upper
+			   (if (zero? (length (elt data 6))) -1
+			     (maybe-parse (elt data 6) code))
+			   (elt data 1)
+			   (elt data 10)
+			   (parse-decomposition (elt data 5)))))))
+(define (parse-decomposition string)
+  (if (= (length string) 0) #f
+    (let ((codes (remove #f (map (lambda (s) (string->number s 16))
+				 (segment string))))
+	  (stream (open-output-string)))
+      (dolist (code codes)
+	(write-char (integer->char code) stream))
+      (string->packet (string-stream-contents stream) 'utf8))))
+
+(define (dump-range name start end)
+  (lineout "struct FD_COMPRESSED_CHAR_INFO "
+    name "[" (+ 1 (- end start)) "]={")
+  (dotimes (i (- end start))
+    (let ((entry (elt unicode-table (+ i start))))
+      (if entry
+	  (let ((code (vector-ref entry 0))
+		(char-type (vector-ref entry 1))
+		(upper (vector-ref entry 2))
+		(lower (vector-ref entry 3))
+		(dweight (vector-ref entry 4)))
+	    (lineout
+		"  {0x"  
+	      (number->string
+	       (cond ((not (= upper code)) upper)
+		     ((not (= lower code)) lower)
+		     ((>= dweight 0) dweight)
+		     (else code)) 16)
+	      ", 0x" (number->string char-type 16) "}"
+	      (if (= i (1- end)) " " ", ")
+	      "/* 0x" (number->string code 16) " "
+	      (vector-ref entry 5) " " " */ "))
+	  (lineout "  {"  (+ start i) ", 0x80}"
+		   (if (= i (1- end)) " " ", ")
+		   " /* not defined */"))))
+  (lineout "\t};"))
+
+(define (read-unicode-data filename)
+  (let* ((stream (open-record-stream filename '(not> (eol))))
+	 (line (read-record stream)))
+    (until (eof-object? line)
+      (process-line line)
+      (set! line (read-record stream)))))
+
+(define (count-decomposed-chars)
+  (let ((count 0))
+    (dotimes (i 70000)
+      (if (and (elt unicode-table i)
+	       (vector-ref (elt unicode-table i) 7))
+	  (set! count (+ count 1))))
+    count))
+
+(define (write-decomposition-table)
+  (lineout "struct FD_UNICODE_DECOMPOSITION "
+    "decompositions[" "]={")
+  (dotimes (i 7000)
+    (when (and (elt unicode-table i)
+	       (vector-ref (elt unicode-table i) 7))
+      (printout "   {" (elt (elt unicode-table i) 0) ", \"")
+      (let ((decomposition (vector-ref (elt unicode-table i) 7)))
+	(dotimes (i (length decomposition))
+	  (printout "\\" (number->string (elt decomposition i) 8)))
+	(printout "\"},\n"))))
+  (lineout "  {0, ""}};"))
+
+(define (write-chardata n)
+  (dotimes (i n)
+    (dump-range (stringout "page" i "_char_data")
+		(* i 256) (+ (* i 256) 256)))
+  (write-decomposition-table)
+  (lineout "static void init_chardata()")
+  (lineout "{")
+  (dotimes (i n)
+    (lineout "\tfd_compressed_charinfo[" i "]="
+      (stringout "page" i "_char_data") ";"))
+  (lineout "}"))
+(define (main (file "UnicodeData.txt") (n 256))
+  ;; From ftp://ftp.unicode.org/Public/UNIDATA/UnicodeData.txt
+   (read-unicode-data file)
+  ;; Write everything
+  (write-chardata (parse-arg n)))
+

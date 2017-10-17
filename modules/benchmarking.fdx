@@ -1,0 +1,38 @@
+;;; -*- Mode: fdscript; -*-
+
+;;; This is a simple benchmarking module
+;;; Copyright (C) beingmeta, inc. 2004
+
+;;; $Id: benchmarking.fdx,v 1.2 2004/08/19 12:05:40 haase Exp $
+
+(in-module 'benchmarking 'tighten)
+
+(define (time-apply proc args)
+  (let* ((start (xtimestamp))
+	 (result (apply proc args)))
+    (values (qc result) (difftime (xtimestamp) start))))
+(define (time-call proc . args)
+  (multiple-value-bind (result time)
+      (time-apply proc args)
+    (values (qc result) time)))
+
+(define (benchmark proc samples (cleanup #f) (iterations 1))
+    (let ((sum 0) (n 0) (sumsq 0)
+	  (samples (cond ((vector? samples) samples)
+			 ((pair? samples) (vector samples))
+			 (else (vector (list samples))))))
+      (dotimes (i iterations)
+	(doseq (sample samples)
+	  ;; (lineout "sample=" sample)
+	  ;; (lineout "iteration=" i)
+	  (multiple-value-bind (result time)
+	      (time-apply proc sample)
+	    (set! sum (+ time sum))
+	    (set! sumsq (+ (* time time) sumsq))
+	    (set! n (+ n 1))
+	    (if cleanup (cleanup)))))
+      (values (/ sum n)
+	      (vector n sum sumsq)))) 
+
+(module-export! '{time-apply time-call benchmark})
+

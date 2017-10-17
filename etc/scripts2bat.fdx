@@ -1,0 +1,22 @@
+#!/usr/bin/fdscript
+
+(use-module 'fdtext)
+
+(define dirsep (qc "\\" "/"))
+
+(define script-filename-pattern
+  #((label dir (chunk #({#((isalnum+) ":") ""}
+                        {"\\" "/" ""}
+			(* #((char-not "\\/") {"\\" "/"})))))
+    (label name (char-not "\\/.")) ".in"))
+
+(define (main script-dir bin-dir)
+  (let ((script-files (getfiles script-dir))
+	(interpreter (stringout bin-dir "\\" "fdscript.exe")))
+    (do-choices (script script-files)
+      (lineout "Processing script file " script)
+      (textlet script-filename-pattern script
+        (lineout "Writing .BAT file" (stringout bin-dir "\\" name ".bat"))
+	(printout-to (open-output-file (stringout bin-dir "\\" name ".bat"))
+          "\"" interpreter "\" "
+          "\"" script "\" " " %*\n")))))

@@ -1,0 +1,416 @@
+AC_INIT(src/os/envfns.c)
+AC_CONFIG_AUX_DIR(etc)
+AC_PREFIX_DEFAULT(/usr/local)
+AC_SUBST(host)
+AC_SUBST(install_group)
+AC_SUBST(install_group_option)
+AC_SUBST(shared_lib_suffix)
+AC_SUBST(lib_suffix)
+AC_SUBST(fd_major_version)
+AC_SUBST(fd_minor_version)
+AC_SUBST(fd_release_version)
+AC_SUBST(default_config_file)
+AC_SUBST(extra_makebin_flags)
+AC_SUBST(extra_cc_flags)
+AC_SUBST(shared_lib_path)
+AC_SUBST(arith_cflags)
+AC_SUBST(dynamic_cflag)
+AC_SUBST(console_libs)
+AC_SUBST(bin_dep_file)
+AC_SUBST(ifmacosx)
+AC_SUBST(ifshared)
+
+AC_SUBST(CLEAN)
+AC_SUBST(MANDIR)
+AC_SUBST(TAGS_TARGET)
+AC_SUBST(REENTRANT)
+AC_SUBST(elispdir)
+
+AC_SUBST(install_libs)
+
+AC_CHECK_PROG(TAGS_TARGET,etags,TAGS,)
+AC_CHECK_PROG(INSTALL_ELISP,emacs,install-elisp,)
+AC_CHECK_PROG(COMPILE_ELISP,emacs,etc/fdscript.elc,)
+
+CLEAN="rm -f"
+threads_default="yes"
+dynlink_default="yes"
+readline_default="yes"
+mmap_default="yes"
+block_malloc_default="yes"
+with_socket_stdio_default="yes"
+shared_default="no"
+flock_default="no"
+shared_kernel=""
+arith_cflags=""
+dynamic_cflag="-rdynamic"
+fd_major_version=`cat version.major`
+fd_minor_version=`cat version.minor`
+fd_release_version=`cat version.release`
+install_group_option=""
+bin_dep_file=libfdscript.a
+console_libs=""
+extra_cc_flags=""
+extra_makebin_flags=""
+shared_lib_suffix="so"
+shared_lib_path="LD_LIBRARY_PATH"
+lib_suffix="a"
+elispdir='${prefix}/share/emacs/site-lisp'
+ifmacosx="#"
+ifshared="#"
+
+install_libs="install-static-libs"
+
+AC_CANONICAL_TARGET
+AC_DEFINE_UNQUOTED(FD_MAJOR_VERSION,$fd_major_version)
+AC_DEFINE_UNQUOTED(FD_MINOR_VERSION,$fd_minor_version)
+AC_DEFINE_UNQUOTED(FD_RELEASE_VERSION,$fd_release_version)
+
+case $host_os in
+  osf*) 
+   make_shared="ld -shared"
+   threads_default=no
+   arith_cflags="-O0"
+   ;;
+  linux*)
+   make_shared="ld -shared"
+   AC_DEFINE(FD_PROC_RUSAGE_PATCH,1)
+   ;;
+  darwin*)
+   with_socket_stdio_default="no"
+   flock_default="no"
+   mmap_default="no"
+   AC_DEFINE(FD_SHARED_LIB_SUFFIX,".dylib")
+   shared_lib_suffix="dylib"
+   shared_lib_path="DYLD_LIBRARY_PATH"
+   dynamic_cflag="-dynamic"
+   # This is where some Unix packages live under OS X
+   #  LDFLAGS="-L/sw/lib $LDFLAGS"
+   # This will uncomment part of the makefile
+   ifmacosx=""
+   ;;
+  freebsd*)
+   with_socket_stdio_default="no"
+   ;;
+  solaris*.*)
+   with_socket_stdio_default="no"
+   make_shared="ld -G"
+   ;;
+  aix*.*)
+   make_shared=:
+   LDFLAGS="-Xlinker -bmaxdata:0x80000000"
+   CFLAGS="-lbsd"
+   shared_default=no
+   dynlink_default=no
+   threads_default=no
+   ;;
+  hpux*.*)
+   make_shared="ld -r"
+   threads_default=no
+   ;;
+  sunos*.*)
+   make_shared="ld -G"
+   ;;
+  *)
+   echo "Unknown host os " $host_os
+   make_shared=:
+  ;;	
+esac  
+
+case $target_cpu in
+  powerpc*)
+    AC_DEFINE(FD_WITHOUT_POINTER_KLUDGES,1)
+    ;;
+  sparc*)
+    AC_DEFINE(FD_WITHOUT_POINTER_KLUDGES,1)
+    ;;
+  alpha*)
+   CFLAGS="-O0"
+   ;;
+esac
+
+HOST=$host
+AC_DEFINE_UNQUOTED(FD_OSID,"$host")
+
+AC_PROG_CC
+AC_PROG_INSTALL
+AC_PROG_RANLIB
+AC_AIX
+#AC_CYGWIN
+#AC_MINGW32
+
+AC_DEFINE(FD_WORDS_ARE_ALIGNED,1)
+
+if test -d "$prefix/share/man"; then MANDIR="\${prefix}/share/man";
+elif test -d "$prefix/man"; then MANDIR="\${prefix}/man";
+else MANDIR="\${prefix}/share/man";
+fi
+
+AC_ARG_ENABLE(shared,--en[able]-shared Build with/without shared FramerD libraries,,enable_shared=$shared_default)
+if test $enable_shared = "yes"; then
+  lib_suffix=${shared_lib_suffix}
+  bin_dep_file="libfdscript.${shared_lib_suffix}"
+  CFLAGS="-fPIC $CFLAGS"
+  linkmode="-dynamic"
+  install_libs="install-shared-libs"
+  ifshared=""
+else
+  bin_dep_file="libfdscript.a"
+  linkmode="-static"
+fi
+
+AC_ARG_ENABLE(errno-checking,--en/disable-errno-checking Enable routine checking of errno,,enable_errno_checking=yes)
+if test $enable_errno_checking = "yes"; then
+  AC_DEFINE(FD_ERRNO_CHECKING_ENABLED,1)
+else
+  AC_DEFINE(FD_ERRNO_CHECKING_ENABLED,0)
+fi
+
+AC_ARG_ENABLE(malloc-logging,--en/disable-malloc-logging Enable optional detailed malloc tracing,,enable_malloc_logging=no)
+if test $enable_malloc_logging = "yes"; then
+  AC_DEFINE(FD_LOG_MALLOC,1)
+else
+  AC_DEFINE(FD_LOG_MALLOC,0)
+fi
+
+AC_ARG_ENABLE(lightweight-oids,--en/disable-lightweight-oids Enable space saving lightweight OIDs,,enable_lightweight_oids=yes)
+if test $enable_lightweight_oids = "yes"; then
+  AC_DEFINE(FD_LIGHTWEIGHT_OIDS,1)
+else
+  AC_DEFINE(FD_LIGHTWEIGHT_OIDS,0)
+fi
+
+if test "$GCC" == "yes"; then
+   AC_DEFINE(HAVE_CONSTRUCTOR_EXPRESSIONS,1)
+else
+   AC_DEFINE(HAVE_CONSTRUCTOR_EXPRESSIONS,0)
+fi
+
+gcc_version=`gcc -dumpversion`
+
+case $gcc_version in
+  4*)
+   CFLAGS="-Wno-pointer-sign $CFLAGS"
+  ;;
+esac
+
+AC_ARG_ENABLE(dynamic-linking,--en/disable-dynamic-linking Enable dynamic linking,,enable_dynamic_linking=$dynlink_default)
+if test $enable_dynamic_linking = "yes"; then
+  extra_cc_flags=$dlflags
+  AC_DEFINE(FD_DYNAMIC_LINKING_ENABLED,1)
+  AC_CHECK_LIB(dl,dlopen)
+  AC_CHECK_HEADERS(dlfcn.h)
+else
+  AC_DEFINE(DYNAMIC_LINKING_ENABLED,0)
+fi
+
+AC_ARG_ENABLE(threads,--en/disable-threads Enable multi-threading,,enable_threads=$threads_default)
+if test $enable_threads = "yes"; then
+  REENTRANT=-D_REENTRANT	
+  AC_CHECK_LIB(pthread,pthread_create)
+  AC_CHECK_LIB(c_r,pthread_create)
+  AC_CHECK_LIB(pthreads,pthread_create)
+  AC_CHECK_HEADERS(pthread.h)
+  AC_DEFINE(FD_THREADS_ENABLED,1)
+else
+  AC_DEFINE(FD_THREADS_ENABLED,0)
+fi
+
+AC_ARG_WITH(fastcgi,--with/without-fastcgi Build with/without FastCGI support,,with_fastcgi=yes)
+if test $with_fastcgi = "yes"; then
+  AC_CHECK_LIB(fcgi,FCGX_IsCGI)
+  AC_CHECK_HEADERS(fcgiapp.h)
+  AC_DEFINE(FD_WITH_FASTCGI,1)
+else
+  AC_DEFINE(FD_WITH_FASTCGI,0)
+fi
+
+AC_ARG_ENABLE(largefiles,--en/disable-largefiles Enable use of large (> 2GB) file support,,largefiles_enabled=yes)
+if test $largefiles_enabled = "yes"; then
+  AC_DEFINE(FD_LARGEFILES_ENABLED,1)
+else
+  AC_DEFINE(FD_LARGEFILES_ENABLED,0)
+fi
+
+AC_ARG_WITH(socket_stdio,--with/without-socket-stdio Build with/without using STDIO on sockets,,with_socket_stdio=$with_socket_stdio_default)
+if test $with_socket_stdio = "yes"; then
+  AC_DEFINE(FD_USE_STDIO_WITH_SOCKETS,1)
+else
+  AC_DEFINE(FD_USE_STDIO_WITH_SOCKETS,0)
+fi
+
+AC_ARG_WITH(mmap_alloc,--with/without-mmap-alloc Build with/without mmap for large mallocs,,with_mmap_alloc=$mmap_default)
+if test $with_mmap_alloc = "yes"; then
+  AC_DEFINE(FD_WITH_MMAP_MALLOC,1)
+else
+  AC_DEFINE(FD_WITH_MMAP_MALLOC,0)
+fi
+
+AC_ARG_WITH(block_malloc,--with/without-block-malloc Build with/without block malloc,,with_block_malloc=$block_malloc_default)
+if test $with_block_malloc = "yes"; then
+  AC_DEFINE(FD_WITH_BLOCK_MALLOC,1)
+else
+  AC_DEFINE(FD_WITH_BLOCK_MALLOC,0)
+fi
+
+AC_ARG_WITH(file_locking,--with/without-file-locking Build with/without file lockin,,with_file_locking=$flock_default)
+if test $with_file_locking = "yes"; then
+  AC_DEFINE(FD_WITH_FILE_LOCKING,1)
+else
+  AC_DEFINE(FD_WITH_FILE_LOCKING,0)
+fi
+
+AC_ARG_WITH(dmalloc,--with/without-dmalloc Build with/without dmalloc,,with_dmalloc=no)
+if test $with_dmalloc = "yes"; then
+  AC_CHECK_LIB(dmalloc,malloc)
+  AC_CHECK_HEADERS(dmalloc.h)
+  AC_DEFINE(FD_WITH_DMALLOC,1)
+else
+  AC_DEFINE(FD_WITH_DMALLOC,0)
+fi
+
+AC_ARG_WITH(config_file,--with/without-config-file Build with FramerD config file,,with_config_file=default)
+if test $with_config_file != "default"; then
+  AC_DEFINE_UNQUOTED(DEFAULT_FRAMERD_CONFIG,"$with_config_file")
+elif test $prefix = "none"; then
+  AC_DEFINE_UNQUOTED(DEFAULT_FRAMERD_CONFIG,"/usr/local/share/framerd/framerd.cfg")
+elif test $prefix = "NONE"; then
+  AC_DEFINE_UNQUOTED(DEFAULT_FRAMERD_CONFIG,"/usr/local/share/framerd/framerd.cfg")
+else
+  AC_DEFINE_UNQUOTED(DEFAULT_FRAMERD_CONFIG,"$prefix/share/framerd/framerd.cfg")
+fi
+
+AC_ARG_WITH(libdir,--with-libdir Build with additional system libraries from dir,,with_libdir=default)
+if test $with_libdir != "default"; then
+  LDFLAGS="$LDFLAGS -L$with_libdir"
+fi
+
+if test $enable_dynamic_linking = "yes"; then
+if test $ac_cv_header_dlfcn_h = "yes"; then
+  dynamic=dynamic
+fi
+fi
+
+AC_ARG_WITH(readline,--with/without-readline Build with/without readline,,with_readline=$readline_default)
+if test $with_readline = "yes"; then
+  AC_CHECK_LIB(ncurses,tgetnum)
+  AC_CHECK_LIB(readline,readline)
+  AC_CHECK_HEADERS(readline/readline.h)
+  AC_DEFINE(FD_WITH_READLINE,1)
+  AC_CHECK_FUNCS(filename_completion_function)
+  AC_CHECK_FUNCS(rl_filename_completion_function)
+elif test $with_readline = "no"; then
+  AC_DEFINE(FD_WITH_READLINE,0)
+else
+  console_libs=$with_readline
+  AC_CHECK_HEADERS(readline/readline.h)
+  AC_DEFINE(WITH_READLINE,1)
+  AC_DEFINE(HAVE_LIBREADLINE,1)
+  AC_CHECK_FUNCS(filename_completion_function,rl_filename_completion_function)
+fi
+
+AC_ARG_WITH(tags,--with/without-tags Build with/without tags,,with_tags="yes")
+if test $with_tags = "no"; then
+  TAGS_TARGET=""
+fi
+
+AC_ARG_WITH(framerd-group,--with/without-framerd-group Install with/without special framerd group,framerd_group=$withval,framerd_group="yes")
+if test $framerd_group = "yes"; then
+  install_group=`sh ./etc/get_framerd_group.sh`
+  install_group_option="-g \$(INSTALL_GROUP)"
+elif test $framerd_group = "no"; then
+  install_group='user'
+  install_group_option=""
+else
+  install_group="$framerd_group"
+  install_group_option="-g $(INSTALL_GROUP)"
+fi
+
+AC_CHECK_TYPE(uchar,unsigned char)
+if test $ac_cv_type_uchar = no; then
+  AC_DEFINE(HAVE_UCHAR,0)
+else
+  AC_DEFINE(HAVE_UCHAR,1)
+fi
+AC_TYPE_UID_T
+AC_TYPE_OFF_T
+
+AC_CHECK_LIB(m,sqrt)
+AC_CHECK_LIB(xnet,socket)
+AC_CHECK_LIB(nsl,socket)
+AC_CHECK_LIB(socket,send)
+AC_CHECK_LIB(intl,gettext)
+AC_CONFIG_HEADER(include/framerd/config.h)
+AC_CHECK_HEADERS(wchar.h pwd.h grp.h)
+AC_CHECK_HEADERS(unistd.h pthread.h fcntl.h libintl.h langinfo.h wait.h)
+AC_CHECK_HEADERS(sys/types.h)
+AC_CHECK_HEADERS(sys/file.h sys/filio.h)
+AC_CHECK_HEADERS(sys/fcntl.h sys/ioctl.h sys/stat.h sys/resource.h)
+AC_CHECK_HEADERS(sys/socket.h sys/select.h netdb.h netinet/in.h sys/un.h)
+AC_CHECK_HEADERS(sys/select.h netdb.h netinet/in.h)
+AC_CHECK_HEADERS(valgrind.h)
+AC_HEADER_DIRENT
+AC_HEADER_STDC
+AC_HEADER_STAT
+AC_HEADER_TIME
+AC_STRUCT_TIMEZONE
+
+#AC_CHECK_TYPE(rl_compentry_func_t,void *f())
+#if test $ac_cv_type_rl_compentry_func_t = "no"; then
+#  AC_DEFINE(OLDER_READLINE,1)
+#else
+#  AC_DEFINE(OLDER_READLINE,0)
+#fi
+AC_DEFINE(OLDER_READLINE,0)
+
+AC_STRUCT_TM
+AC_STRUCT_TIMEZONE
+AC_EGREP_HEADER(tm_gmtoff,time.h,AC_DEFINE(HAVE_TM_GMTOFF,1),AC_DEFINE(HAVE_TM_GMTOFF,0))
+AC_C_INLINE
+AC_C_BIGENDIAN
+AC_CHECK_SIZEOF(int)
+AC_CHECK_SIZEOF(long)
+AC_CHECK_SIZEOF(long long)
+AC_CHECK_SIZEOF(void *)
+AC_CHECK_FUNCS(pthread_create)
+AC_CHECK_FUNCS(fgetwc)
+AC_CHECK_FUNCS(fputwc)
+AC_CHECK_FUNCS(strdup)
+AC_CHECK_FUNCS(usleep)
+AC_CHECK_FUNCS(nanosleep)
+AC_CHECK_FUNCS(flock)
+AC_CHECK_FUNCS(mkstemp)
+AC_CHECK_FUNCS(mmap)
+AC_CHECK_FUNCS(fseeko)
+AC_CHECK_FUNCS(realpath)
+AC_CHECK_FUNCS(gettimeofday)
+AC_CHECK_FUNCS(ftime)
+AC_CHECK_FUNCS(wait4)
+AC_FUNC_STRFTIME
+
+if test $prefix = "NONE"; then
+  AC_DEFINE_UNQUOTED(FRAMERD_SHARE_DIR,"/usr/local/share/framerd/")
+  AC_DEFINE_UNQUOTED(FRAMERD_MODULE_DIR,"/usr/local/share/framerd/modules/")
+  AC_DEFINE_UNQUOTED(BIN_INSTALL_DIR,"/usr/local/bin")
+  AC_DEFINE_UNQUOTED(LIB_INSTALL_DIR,"/usr/local/lib")
+else
+  AC_DEFINE_UNQUOTED(FRAMERD_SHARE_DIR,"$prefix/share/framerd/")
+  AC_DEFINE_UNQUOTED(FRAMERD_MODULE_DIR,"$prefix/share/framerd/modules/")
+  AC_DEFINE_UNQUOTED(BIN_INSTALL_DIR,"$prefix/bin")
+  AC_DEFINE_UNQUOTED(LIB_INSTALL_DIR,"$prefix/lib")
+fi
+
+AC_OUTPUT(makefile 
+	  etc/installer
+          etc/fdstartserver etc/framerd etc/fdxs etc/fdbatchjob scripts/fdconfig
+          scripts/fd_add scripts/fd_drop scripts/fd_find
+          scripts/fd_get scripts/fd_test scripts/fd_id
+          scripts/fd_make scripts/fdd
+          scripts/make-super-pool   scripts/register-super-pool
+          scripts/make-file-pool    scripts/reset-file-pool
+	  scripts/make-file-index   scripts/reset-file-index
+          scripts/unzipf-file-index scripts/index-load
+          scripts/list-file-pool    scripts/file-pool-data
+	  scripts/rebase-file-pool  scripts/rebase-file-index
+          scripts/compare-file-pools scripts/pool-diff)
+

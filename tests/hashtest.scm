@@ -1,0 +1,67 @@
+;;; Testing hashtables
+
+(load-once (get-component "test-util.scm"))
+(start-test "hashtest.scm")
+
+(define test-table (make-hashtable))
+
+(define n-symbols 0)
+
+(define (build-table)
+  (do-choices (sym (all-symbols)) 
+    (set! n-symbols (+ n-symbols 1))
+    (let* ((name (symbol->string sym))
+	   (nchars (length name))
+	   (class (remainder (length name) 3)))
+      (hashtable-add! test-table nchars sym)
+      (hashtable-add! test-table (/ 1 (* 2 nchars)) name)
+      (cond ((= class 0) (hashtable-set! test-table sym name))
+	    ((= class 1) (hashtable-set! test-table (cons name nchars) sym))
+	    ((= class 2)
+	     (hashtable-set! test-table
+			     (vector name nchars) (cons name nchars)))))))
+
+(define (check-numeric-key i)
+  (let ((elts1 (hashtable-get test-table i))
+	(elts2 (hashtable-get test-table (/ 1 (* i 2)))))
+    (do-choices (elt elts1)
+      (unless (and (symbol? elt) (= (length (symbol->string elt)) i))
+	(report-problem 'check-symbol-key "Error for " elt)))
+    (do-choices (elt elts2)
+      (unless (and (string? elt) (= (length elt) i))
+	(report-problem 'check-string-key "Error for " elt)))))
+
+(define (check-numeric-keys)
+  (dotimes (i 25)
+    (when (> i 0) (check-numeric-key i))))
+
+(define (check-symbolic-keys)
+  (let ((elts (hashtable-keys test-table)))
+    (do-choices (sym elts)
+      (when (symbol? sym)
+	(let* ((name (symbol->string sym)) (nchars (length name)))
+	  (unless (or (and (= 0 (remainder nchars 3))
+			   (equal? (hashtable-get test-table sym) name))
+		    (and (= 1 (remainder nchars 3))
+			 (eq? (hashtable-get test-table (cons name nchars))
+			      symbol))
+		    (and (= 1 (remainder nchars 3))
+			 (equal? (hashtable-get test-table (vector name nchars))
+				 (cons name nchars))))
+	    (report-problem 'structured-entry "Problem with " sym)))))))
+
+
+(define (check-alist-hashtable-fcns)
+  (unless (null? (hashtable->alist (make-hashtable)))
+    (report-problem 'empty-hashtable-to-alist))
+  (let ((foo (alist->hashtable '())))
+    (hashtable-add! foo 'a 1)
+    (hashtable-zap! foo 'a)
+    (unless (null? (hashtable->alist))
+      (report-problem 'zapped-hashtable-non-null-alist))))
+
+(begin (build-table)
+       (check-numeric-keys)
+       (check-symbolic-keys)
+       (report-problems)) 
+(clear-env-changes!)

@@ -1,0 +1,33 @@
+#!/bin/bash
+if (test -f $1) then
+   control_file=$1;
+elif (test -f $1.fdz) then
+   control_file=$1.fdz;
+else
+   echo "Usage: fdservctl <control file> <status|reset|sleep|wake>";
+   exit 1;
+fi
+base=`basename $control_file .fdz`
+if (test $2 == "status") then
+  if (test ! -f $base.pid) then
+    echo "FDserver $control_file is not running";
+  elif (test ! -f $base.ppid) then
+    echo "FDserver $control_file is running standalone with pid="`cat $base.pid`" listening at "`cat $base.nid`;
+  elif (test ! -f $base.nid) then
+    echo "FDServer $control file is currently sleeping while being managed by process "`cat $base.ppid`;
+  else
+    echo "FDServer $control file is listening on "`cat $base.nid`" running with pid="`cat $base.pid`" and managed by process "`cat $base.ppid`;
+  fi
+elif (test $2 == "reset") then
+  kill `cat $base.pid`;
+elif (test $2 == "sleep") then
+  touch $base.sleep;
+  kill `cat $base.pid`;
+elif (test $2 == "wake") then
+  rm $base.sleep;
+  kill `cat $base.pid`;
+else
+   echo "Usage: fdctl <control file> <status|reset|sleep|wake>";
+   exit 1;
+fi
+

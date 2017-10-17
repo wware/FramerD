@@ -1,0 +1,31 @@
+BODY {
+  background-color: #baadad; color: black; font-size: 12pt;}
+TABLE.header {
+  background-color: #422828; color: #baadad;
+  margin-left: 0%; margin-right: 0%;}
+TABLE.header TH.title { text-align: left; vertical-align: top; font-size: 18pt;}
+TABLE.header TH.smtitle { text-align: left; vertical-align: top; font-size: 12pt;}
+TABLE.header TH.llogo { text-align: left; vertical-align: top;}
+TABLE.header TH.rlogo { text-align: right; vertical-align: top;}
+TABLE.header TD.gloss { text-align: left; color: silver; font-size: 10pt;}
+TABLE.header TD.buttons { text-align: left; vertical-align: top; color: silver; font-size: 10pt;}
+TABLE.header TD.lbuttons { text-align: left; vertical-align: top; color: silver; font-size: 10pt;}
+TABLE.header TD.rbuttons { text-align: right; vertical-align: top; color: silver; font-size: 10pt;}
+TABLE.header TD.languages { text-align: center; color: white; font-size: 10pt;}
+TABLE.header TH.smtitle A { text-decoration: none; font-family: san-serif; color: ivory; }
+TABLE.sloteditor {
+  margin-left: 10%; margin-right: 10%;}
+TH.slotid { text-align: left; font-weight: bold; vertical-align: top;}
+TH.slotid A { text-decoration: none; font-family: sans-serif; font-size: 16pt; color: blue;}
+TD.slotbar { text-align: center; }
+TD.slotgloss { text-align: left; }
+TD.expansion { text-align: left; font-family: serif; font-size: 6pt;}
+TD.blank { text-align: center; }
+TD.textfield { text-align: left; vertical-align: top;}
+TD.slotvalues { text-align: left; }
+TH.buttons { vertical-align: top; text-align: left; }
+TH.rbuttons { vertical-align: top; text-align: right; }
+TH.cbox { vertical-align: top; text-align: right; padding: 0pt; }
+TH.rbox { vertical-align: top; text-align: left; font-size: 6pt; padding: 0pt; }
+TD.concept { text-align: left; font-size: small; }
+SPAN.nobreak { white-space: nowrap; }

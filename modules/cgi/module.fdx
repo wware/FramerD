@@ -1,0 +1,93 @@
+(in-module 'cgi '{brico fdinternals fdtext htmlgen})
+
+(if (signals-error? (get-module 'cgitools))
+    (use-module 'fakecgi)
+    (use-module 'cgitools))
+
+(module-export! '{cgi-var cgi-init cgi-data})
+
+;;; REQ-GET
+
+(define (string-reader string)
+  (if (equal? string "") {}
+      (try (read-from-string string) (string->symbol string))))
+
+(define (req-get arg1 (arg2 #f))
+  (let ((reqdata (if arg2 arg1 (cgi-data)))
+	(var (if arg2 arg2 arg1)))
+    (let ((cgival (get reqdata var)))
+      (cond ((or  (equal? cgival "") (null? cgival)) (fail))
+	    ((string? cgival) (string-reader cgival))
+	    ((pair? cgival) (elts (map string-reader cgival)))
+	    (else cgival)))))
+
+(define (helplet url)
+  (anchor@ "docframe" url
+	   (image "/images/qmark.gif"
+		  border 0 style "vertical-align: bottom;")))
+
+(module-export! '{helplet req-get})
+
+;;;; Live checkboxes
+
+(define refile-javascript
+"
+<SCRIPT LANGUAGE='Javascript'>
+<!--
+function refile_form () {
+  document.fdform.submit(); }
+-->
+</SCRIPT>
+"
+)
+
+(define (display-checkbox reqdata var val selected)
+  (htmltag 'input 'type 'checkbox 'name var 'value val
+	   (if selected " CHECKED" "")))
+
+(define (live-checkbox reqdata var val selected)
+  (htmltag 'input 'type 'checkbox 'name var 'value val
+	   'onclick "refile_form()"
+	   (if selected " CHECKED" "")))
+
+
+(module-export! '{refile-javascript display-checkbox live-checkbox})
+
+;;; Utility functions
+
+(define (num->string n precision)
+  (if (inexact? n) (inexact->string n precision) n))
+
+(define (pretty-timestring timestamp)
+  (stringout
+   (string-capitalize (symbol->string (get-month timestamp)))
+   " " (get-date timestamp) ", " (get-year timestamp)))
+
+(define (limit-string string len)
+  (if (< (length string) len) (html string)
+    (let ((space-pos (tx-search '(isspace) string len)))
+      (if (or (fail? space-pos) (not space-pos) (> space-pos (+ len 10)))
+	  (html (subseq string 0 len) (font (color "red") "..."))
+	(html (subseq string 0 space-pos) (font (color "red") "..."))))))
+
+(define (short-value value (language (qc)))
+  (if (oid? value)
+      (let ((name (get value 'obj-name)))
+	(if (string? name) name
+	  (try
+	   (pick-one (largest (get value language) length))
+	   (pick-one (largest (get value 'names) length))
+	   (pick-one (largest (get value 'words) length))
+	   (write-to-string (get value 'obj-name))
+	   value)))
+    (let ((name (if (string? value) value (write-to-string value))))
+      (if (> (length name) 60)
+	  (html (nobreak (subseq name 0 60)) (font (color "red") "...."))
+	(html name)))))
+
+(define (this-script)
+  (get (cgi-data) 'script_name))
+
+(module-export!
+ '{num->string pretty-timestring limit-string short-value
+	       this-script})

@@ -1,0 +1,35 @@
+;;; -*- Mode: fdscript; -*-
+
+;;; This provides fake CGI interaction functions for running CGI scripts
+;;;  from a regulary interpreter.
+;;; Copyright (C) beingmeta, inc. 2002
+;;;   $Id: fakecgi.fdx,v 1.5 2003/08/27 10:53:28 haase Exp $
+
+(in-module 'fakecgi)
+
+(define %cgi-data% (frame-create #f))
+
+(define (cgi-data) %cgi-data%)
+
+(define (%get-cgi-var var)
+  (let ((val (get %cgi-data% var)))
+    (cond ((string? val) (read-from-string val))
+	  ((pair? val) (elts (map read-from-string val)))
+	  (else val))))
+
+(define cgi-init
+  '(macro (expr)
+     `(begin ,@(map (lambda (var)
+		      `(define ,var (get %cgi-data% ',var)))
+		    (cdr expr)))))
+(define cgi-var
+  '(macro (expr)
+     `(begin ,@(map (lambda (var)
+		      `(define ,var (%get-cgi-var ',var)))
+		    (cdr expr)))))
+
+(define (cgi-set! . args)
+  (if (null? (cdr args)) (set! %cgi-data% (car args))
+    (set! %cgi-data% (apply frame-create #f args))))
+
+(module-export! '{cgi-data cgi-set! cgi-init cgi-var %get-cgi-var})

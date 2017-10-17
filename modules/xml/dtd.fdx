@@ -1,0 +1,366 @@
+;;; -*- Mode: FDScript; -*-
+
+(in-module 'xml #t)
+
+(use-module '{fdtext osprims})
+
+;; 0 say nothing
+;; 1 describe errors
+;; 2 describe actions, warnings
+;; 3 describe entities+expansion
+(define trace-level 1)
+
+;;; Top level functions:
+
+(define (process-dtd-items item-list)
+  (let ((petable (make-hashtable))
+	(etable (make-hashtable))
+	(ntable (make-hashtable))
+	(attribs (make-hashtable))
+	(cmodels (make-hashtable)))
+    (dolist (item item-list)
+      (process-dtd-item item petable etable ntable attribs cmodels #f))
+    (frame-create #F
+      'entities etable 'notations ntable
+      'attributes attribs 'content-models cmodels
+      'parameter-entities petable)))
+
+(define (process-dtd-data string)
+  (process-dtd-items (get-dtd-elements string)))
+
+(define dtd-cache (make-hashtable))
+
+(sdefine (retreive-dtd sysname uri)
+  (try (get dtd-cache sysname)
+       (get dtd-cache uri)
+       (let* ((data (urldata uri))
+	      (parsed (process-dtd-data data)))
+	 (when uri (hashtable-set! dtd-cache uri parsed))
+	 (when sysname (hashtable-set! dtd-cache sysname parsed))
+	 parsed)))
+
+(define (get-dtd sysname uri)
+  (try (get dtd-cache sysname)
+       (get dtd-cache uri)
+       (retreive-dtd sysname uri)))
+
+(module-export! '{process-dtd-data get-dtd})
+
+;;;; Basic parsing
+
+(define parameter-entity-pattern
+  #("%" (+ {(isalnum) "." "-" "_"}) ";"))
+
+(define dtd-item #("<!" {"ENTITY" "ELEMENT" "ATTLIST" "NOTATION"} (char-not ">") ">"))
+(define dtd-conditional
+  (tx-closure
+   #("<![" {"INCLUDE" "IGNORE" parameter-entity-pattern} "[" (spaces*)
+     (* {dtd-conditional dtd-item (spaces) parameter-entity-pattern})
+     "]]>")))
+
+(define dtd-comment
+  #("<!--" (not> "-->") "-->"))
+
+(define (strip-dtd-comments string)
+  (let ((stream (open-string-stream))
+	(frags (tx-fragment string dtd-comment)))
+    (dolist (data (tx-fragment string dtd-comment))
+      (unless (has-prefix "<!--" data) (display data stream)))
+    (string-stream-contents stream)))
+
+(define (petransform string petable)
+  (if (= (length string) 0) ""
+    (let* ((s string)
+	   (breakdown (tx-fragment s parameter-entity-pattern))
+	   (output (open-string-stream)))
+      (dolist (frag breakdown)
+	(cond ((= (length frag) 0))
+	      ((tx-match parameter-entity-pattern frag)
+	       (let ((expansion (get petable (subseq frag 1 (- (length frag) 1)))))
+		 (unless (exists? expansion)
+		   (when (> trace-level 0)
+		     (lineout "Warning: parameter entity " frag " unbound")))
+		 (if (exists? expansion)
+		     (if (pair? expansion)
+			 (display (urldata (cadr expansion)) output)
+		       (display expansion output))
+		   (display frag output))))
+	      (else (display frag output))))
+      (string-stream-contents output))))
+
+(define (get-dtd-elements string)
+  (let ((results '())
+	(without-comments (strip-dtd-comments string)))
+    (dolist (item (tx-fragment (strip-dtd-comments string) dtd-conditional))
+      (unless (= (whitespace% item) 100)
+	(if (has-prefix "<![" item) (set! results (cons (string-trim item) results))
+	  (dolist (sub-item (tx-fragment item dtd-item))
+	    (unless (= (whitespace% sub-item) 100)
+	      (set! results (cons (string-trim sub-item) results)))))))
+    (reverse results)))
+
+(define dtd-glob (choice dtd-item dtd-comment))
+
+;;;; Getting URLDATA
+
+(define urldata-cache (make-hashtable))
+
+(define (urldata uri)
+  (try (get urldata-cache uri)
+       (let* ((result (urlget uri))
+	      (content (if (string? (get result 'content)) (get result 'content)
+			 (if (packet? (get result 'content))
+			     (try (packet->string (get result 'content) (get result 'charset))
+				  (get result 'content))
+			   (get result 'content)))))
+	 (hashtable-set! urldata-cache uri content)
+	 content)))
+
+;;;; The central loop
+
+(define (process-dtd-item item params entities ntable attribs cmodels base)
+  (unless (or (has-prefix "<!--" item) (= (length item) 0) (= (whitespace% item) 100)
+	      (equal? "]]" item))
+    (when (> trace-level 2) (lineout "Processing " (readably item)))
+    (cond ((has-prefix "<![INCLUDE[" item)
+	   (dolist (item (get-dtd-elements (subseq item 11 (1- (length item)))))
+	     (process-dtd-item item params entities ntable attribs cmodels base)))
+	  ((exists? (tx-matcher #("<![" parameter-entity-pattern "[") item))
+	   (let ((len (tx-matcher #("<![" parameter-entity-pattern "[") item)))
+	     (when (equal? (get params (subseq item 4 (- len 2))) "INCLUDE")
+	       (dolist (item (get-dtd-elements (subseq item len (1- (length item)))))
+		 (process-dtd-item item params entities ntable attribs cmodels base)))))
+	  ((and (has-prefix "%" item) (exists? (tx-matcher parameter-entity-pattern item)))
+	   (let* ((len (tx-matcher parameter-entity-pattern item))
+		  (replacement (get params (subseq item 1 (1- len)))))
+	     (if (string? replacement)
+		 (dolist (item (get-dtd-elements replacement))
+		   (process-dtd-item item params entities ntable attribs cmodels base))
+	       (if (pair? replacement)
+		   (dolist (item (get-dtd-elements (urldata (cadr replacement))))
+		     (process-dtd-item item params entities ntable attribs cmodels (cadr replacement)))))))
+	  ((exists? (tx-matcher #("<!ENTITY" (spaces) "%" (spaces)) item))
+	   (if (tx-search parameter-entity-pattern item)
+	       (let ((expansion (petransform item params)))
+		 (handle-parameter-entity-decl expansion params base)
+		 (when (> trace-level 2) (lineout "Processed: " (readably expansion))))
+	     (handle-parameter-entity-decl item params base)))
+	  ((has-prefix "<!ENTITY " item)
+	   (if (tx-search parameter-entity-pattern item)
+	       (let ((expansion (petransform item params)))
+		 (handle-general-entity-decl expansion entities)
+		 (when (> trace-level 2) (lineout "Processed: " (readably expansion))))
+	     (handle-general-entity-decl item entities)))
+	  ((has-prefix "<!ELEMENT " item)
+	   (if (tx-search parameter-entity-pattern item)
+	       (let ((expansion (petransform item params)))
+		 (handle-element-decl expansion cmodels)
+		 (when (> trace-level 2) (lineout "Processed: " (readably expansion))))
+	     (handle-element-decl item cmodels)))
+	  ((has-prefix "<!ATTLIST " item)
+	   (if (tx-search parameter-entity-pattern item)
+	       (let ((expansion (petransform item params)))
+		 (handle-attlist-decl expansion attribs)
+		 (when (> trace-level 2) (lineout "Processed: " (readably expansion))))
+	     (handle-attlist-decl item attribs)))
+	  ((has-prefix "<!NOTATION " item)
+	   (if (tx-search parameter-entity-pattern item)
+	       (let ((expansion (petransform item params)))
+		 (handle-notation-decl expansion ntable)
+		 (when (> trace-level 2) (lineout "Processed: " (readably expansion))))
+	     (handle-notation-decl item ntable)))
+	  (else (when (> trace-level 0) (lineout "Failed to handle " (readably item)))))))
+
+;;; Entity declarations
+
+(define quoted-string
+  `{#("'" (label value (char-not "'")) "'")
+    #("\"" (label value (char-not "\"")) "\"")})
+(define quoted-value-pattern
+  {#("'" (label value {"" (char-not "'")}) "'")
+    #("\"" (label value {"" (char-not "\"")}) "\"")})
+(define quoted-uri-pattern
+  {#("'" (label uri {"" (char-not "'")}) "'")
+    #("\"" (label uri {"" (char-not "\"")}) "\"")})
+
+(define general-entity-decl-pattern
+  (tx-closure
+   {
+    #("<!ENTITY" (spaces) (label name (xmlname)) (spaces)
+      "SYSTEM" (spaces) "\"" (label uri quoted-string)
+      {"" (spaces)} ">")
+    #("<!ENTITY" (spaces) (label name (xmlname)) (spaces)
+      (label value quoted-string) {"" (spaces)} ">")
+    #("<!ENTITY" (spaces) (label name (xmlname)) (spaces)
+      (label value quoted-string) (spaces)
+      "NDATA" (spaces) (label ndata (xmlname)) (spaces*) ">")}))
+
+
+(define (handle-general-entity-decl string entities)
+  (unless (tx-match general-entity-decl-pattern string)
+    (when (> trace-level 0) (lineout "Failed general entity parse for " (readably string))))
+  (textlet general-entity-decl-pattern string
+    (cond ((and (bound? ndata) (bound? uri))
+	   (hashtable-set! entities (string-append "&" name)
+			   (cons ndata (urldata uri))))
+	  ((bound? uri)
+	   (hashtable-set! entities name (urldata uri)))
+	  (else (hashtable-set! entities name value)))))
+  
+(define parameter-entity-decl-pattern
+  {
+   (vector "<!ENTITY" '(spaces) "%" '(spaces) '(label name (xmlname)) '(spaces)
+	   "SYSTEM" '(spaces) quoted-uri-pattern '(spaces*) ">")
+   (vector "<!ENTITY" '(spaces) "%" '(spaces) '(label name (xmlname)) '(spaces)
+	   quoted-value-pattern '(spaces*) ">")
+   (vector "<!ENTITY" '(spaces) "%" '(spaces) '(label name (xmlname)) '(spaces) "PUBLIC" '(spaces)
+	   quoted-value-pattern '(spaces*) ">")
+   (vector "<!ENTITY" '(spaces) "%" '(spaces) '(label name (xmlname)) '(spaces) "PUBLIC" '(spaces)
+	   quoted-value-pattern '(spaces) quoted-uri-pattern '(spaces*) ">")})
+
+(define (handle-parameter-entity-decl string pentities base)
+  (unless (tx-match parameter-entity-decl-pattern string)
+    (when (> trace-level 0) (lineout "Failed parameter entity parse for " (readably string))))
+  (let ((match (match->frame #f parameter-entity-decl-pattern string)))
+    (when (fail? (get pentities (get match 'name)))
+      (let ((val (if (exists? (get match 'uri))
+		     (list #f
+			   (if (find #\/ (get match 'uri)) (get match 'uri)
+			     (string-append (dirname base) "/" (get match 'uri))))
+		   (get match 'value))))
+	(when (> trace-level 1)
+	  (lineout "Binding "  (get match 'name) " to " (readably val)))
+	(hashtable-set! pentities (get match 'name) val)))))
+
+;;; Element declarations
+
+(define notation-decl
+  (vector "<!NOTATION" '(spaces) '(label nname (xmlname)) '(spaces)
+	  '(label domain {"SYSTEM" "PUBLIC"}) '(spaces)
+	  quoted-string '(spaces*) ">"))
+
+(define (handle-notation-decl string ntable)
+  (when (and (> trace-level 0) (fail? (tx-match notation-decl string)))
+    (lineout "Failed to parse NOTATION decl: " (readably string)))
+  (textlet notation-decl string
+    (let ((v (list (intern domain) value)))
+      (when (> trace-level 1) (lineout "Notation declaration for " nname ":" v))
+      (hashtable-set! ntable nname v))))
+
+
+;;; Attribute declarations
+
+(define attrib-types
+  `(chunk
+    {"CDATA" "NMTOKEN" "NMTOKENS" "ENTITY" "ENTITIES" "ID"
+     "IDREF" "IDREFS" "NOTATION"
+     #("(" (xmlname) (* #((spaces*) "|" (spaces*) (xmlname)))")")}))
+
+(define attlist-attrib-decl
+  (tx-closure
+   #((label attr_name (xmlname)) (spaces)
+     (label attr_type attrib-types) (spaces)
+     {(label attr_presence "#IMPLIED")
+      (label attr_presence "#REQUIRED")
+      (label attr_val quoted-string)
+      #((label attr_presence "#FIXED") (spaces)
+	(label attr_val quoted-string))})))
+
+(define attlist-decl
+  (tx-closure
+   #("<!ATTLIST" (spaces) (label elt-name (xmlname))
+     (* #((spaces) (label attrib-decl attlist-attrib-decl)))
+     (spaces*) ">")))
+
+(define (handle-attlist-decl string atable)
+  (when (and (> trace-level 0) (fail? (tx-match attlist-decl string)))
+    (lineout "Failed to parse ATTLIST decl: " (readably string)))
+  (textlet attlist-decl string
+    (when (> trace-level 1) (lineout "Attribute declarations for " elt-name))
+    (when (bound? attrib-decl)
+      (do-choices (decl attrib-decl)
+	(when (and (> trace-level 0) (fail? (tx-match attlist-decl string)))
+	  (lineout "Failed to parse ATTLIST attrib decl: " (readably decl)))
+	(textlet attlist-attrib-decl decl
+	  (let ((attr-description
+		 (if (bound? attr_val)
+		     (if (bound? attr_presence)
+			 (vector attr_name attr_type attr_val attr_presence)
+		       (vector attr_name attr_type attr_val))
+		   (vector attr_name attr_type #f attr_presence))))
+	    (when (> trace-level 1)
+	      (lineout "Attribute declarations for " elt-name ":" attr-description))
+	    (hashtable-add! atable elt-name attr-description)))))))
+
+;;; Element declarations
+
+(define element-decl
+  (tx-closure
+   #("<!ELEMENT" (spaces) (label eltname (xmlname)) (spaces)
+     (label model {"ANY" "EMPTY" content-model})
+     (spaces*) ">")))
+
+(define (handle-element-decl string etable)
+  (when (and (> trace-level 0) (fail? (tx-match element-decl string)))
+    (lineout "Failed to parse ELEMENT decl: " (readably string)))
+  (textlet element-decl string
+    (when (> trace-level 1) (lineout "Element declaration for " eltname ":" model))
+    (hashtable-set! etable eltname
+		    (cond ((equal? model "ANY") 'any)
+			  ((equal? model "EMPTY") 'empty)
+			  (else (parse-content-model model))))))
+
+;;; Content model parsing
+
+(define content-model-item
+  #((label name (xmlname)) (label op {"" "*" "?" "+"})))
+(define content-model-sequence
+  (tx-closure
+   #(content-model (+ #((spaces*) "," (spaces*) content-model)))))
+(define content-model-choice
+  (tx-closure
+   #(content-model (+ #((spaces*) "|" (spaces*) content-model)))))
+
+(define content-model
+  (tx-closure
+   {content-model-item
+    "#PCDATA"
+    #("(" (spaces*)
+      {content-model content-model-sequence content-model-choice}
+      (spaces*) ")" {"" "*"})}))
+
+(define (parse-content-model string)
+  (cond ((equal? string "#PCDATA") 'pcdata)
+	((has-suffix "*" string)
+	 (list '* (qc (parse-content-model (subseq string 0 (1- (length string)))))))
+	((has-suffix "+" string)
+	 (list '+ (qc (parse-content-model (subseq string 0 (1- (length string)))))))
+	((has-suffix "?" string)
+	 (list '? (qc (parse-content-model (subseq string 0 (1- (length string)))))))
+	((and  (has-prefix "(" string)  (has-suffix ")" string))
+	 (let ((inbetween
+		(string-trim (subseq string 1 (- (length string) 1)))))
+	   (cond ((tx-match content-model-item inbetween)
+		  (parse-content-model inbetween))
+		 ((tx-match content-model-sequence inbetween)
+		  (list->vector
+		   (map parse-content-model
+			(parse-compound-content-model
+			 content-model-sequence inbetween))))
+		 ((tx-match content-model-choice inbetween)
+		  (list->choices
+		   (map parse-content-model
+			(parse-compound-content-model
+			 content-model-choice inbetween))))
+		 (else string))))
+	(else (textlet content-model-item string
+		(if (equal? op "") name
+		    (list (intern op) name))))))
+
+(define (parse-compound-content-model pattern string)
+  (let ((vec (tx-extract pattern string)))
+    (cons (vector-ref vec 0)
+	  (map (lambda (x) (vector-ref x 3))
+	       (cdr (vector-ref vec 1))))))
+
+

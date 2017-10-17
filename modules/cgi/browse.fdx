@@ -1,0 +1,273 @@
+;;; -*- Mode: FDScript; -*-
+
+;;; This provides generic browsing from CGI scripts
+;;; Copyright (C) beingmeta, inc. 2002
+;;;   $Id: browse.fdx,v 1.3 2003/08/27 10:53:28 haase Exp $
+
+(in-module 'cgi/browse '{htmlgen xmlgen cgi cgi/brico fdtext fdinternals})
+
+(module-export!
+ '{make-dimension
+   dval-up dval-down dval-down* dval-name string->dval
+   browse-field browse-flat browse-hierarchy
+   embedded-browser})
+
+(define (get-slotid-base slotid)
+  (if (symbol? slotid) slotid
+      (if (oid? slotid)
+	  (string->symbol
+	   (stringout "S" (OID-ADDR-HIGH slotid) "_" (OID-ADDR-LOW slotid)))
+	  (error "Invalid slotid" slotid))))
+
+(define (slotvar base id)
+  (if (string? base)
+      (string->symbol (stringout base "-" id))
+      (string->symbol (stringout (get-slotid-base base) "-" id))))
+
+;;;; Dimensions 
+
+(define (make-dimension . args)
+  ;; name features roots namefn parsers uplink downlink sortfn
+  (let ((vec (make-vector 8 (qc))))
+    (doseq (arg args i) (vector-set! vec i (qc arg)))
+    (make-record 'dimension vec)))
+(define (dimension-name dim)
+  (vector-ref (record-data dim 'dimension) 0))
+(define (dimension-features dim)
+  (vector-ref (record-data dim 'dimension) 1))
+(define (dimension-roots dim)
+  (vector-ref (record-data dim 'dimension) 2))
+(define (dimension-namefn dim)
+  (vector-ref (record-data dim 'dimension) 3))
+(define (dimension-parsers dim)
+  (vector-ref (record-data dim 'dimension) 4))
+(define (dimension-uplink dim)
+  (vector-ref (record-data dim 'dimension) 5))
+(define (dimension-downlink dim)
+  (vector-ref (record-data dim 'dimension) 6))
+(define (dimension-sortfn dim)
+  (vector-ref (record-data dim 'dimension) 7))
+
+;;; Dimension support functions
+
+(define (dval-up value dimension)
+  (if (oid? value)
+      (filter-choices (value (get value (dimension-uplink dimension)))
+	(satisfied? (test-feature (dimension-features dimension) value)))
+      (fail)))
+(define (dval-down value dimension)
+  (if (oid? value)
+      (if (empty? (dimension-features dimension))
+	  (get value (dimension-downlink dimension))
+	  (filter-choices (value (get value (dimension-downlink dimension)))
+	    (satisfied? (test-feature (dimension-features dimension) value))))
+      (fail)))
+(define (dval-down* value dimension)
+  (let ((seen (choices->hashset value)))
+    (do ((v value (hashset-filter seen (dval-down v dimension))))
+	((empty? v) (hashset-elts seen))
+      (hashset-add! seen v))))
+
+(define (dval-name value dimension language)
+  (let ((namefn (dimension-namefn dimension)))
+    (cond ((procedure? namefn) (namefn value language))
+	  ((and (or (oid? namefn) (symbol? namefn)) (frame? value))
+	   (get value namefn))
+	  ((or (hashtable? namefn) (slotmap? namefn)) (get namefn value))
+	  ((oid? value)
+	   (try
+	   (if (exists? (get value language))
+	       (word-list (qc (get value language)))
+	       (fail))
+	   (get value '%refid)
+	   (get value 'obj-name)
+	   "anonymous value"))
+	  (else value))))
+
+(define (string->dval string dimension language)
+  (if (or (fail? string) (not (string? string))
+	  (equal? (string-trim string) ""))
+      (dimension-roots dimension)
+      (if (find #\; string)
+	  (string->dval (elts (segment string ";")) dimension language)
+	  (do ((string (string-trim string))
+	       (features (dimension-features dimension))
+	       (parsers (dimension-parsers dimension) (cdr parsers))
+	       (results {} (filter-choices (result ((car parsers) string language))
+			     (or (fail? (test-feature features result))
+				 (satisfied? (test-feature features result))))))
+	      ((or (null? parsers) (exists? results))
+	       (try results (dimension-roots dimension)))))))
+
+(define (test-feature f val)
+  (cond ((procedure? f) (f val))
+	((and (string? f) (string? val)) (search f val))
+	((not (oid? val)) #t)
+	((or (oid? f) (symbol? f)) (exists? (get val f)))
+	((pair? f) (test val (car f) (cdr f)))
+	((vector? f)
+	 (let ((failure #f) (i 0) (lim (length f)))
+	   (while (and (not failure) (< i lim))
+	     (unless (satisfied? (test-feature (elt f i) v))
+	       (set! failure #t)))
+	   (not failure)))
+	((> (choice-size f) 1) (satisfied? (test-feature f v)))
+	(else #t)))
+
+
+;;;; Dimension browsers
+
+(define (browse-field reqdata var dimension (highlights (qc)))
+  (if (or (exists? (dimension-uplink dimension))
+	  (exists? (dimension-downlink dimension)))
+      (browse-hierarchy reqdata var dimension (qc highlights))
+      (browse-flat reqdata var dimension (qc highlights))))
+
+(define (empty-field-doc dimension)
+  (let ((known-size
+	 (choice-size (index-get %background
+				 (for-choices (feature (dimension-features dimension))
+				   (cons (car feature) (cdr feature)))))))
+    (P* (class "fielddoc")
+	"There are " (if (zero? known-size) " many possible " known-size)
+	" possible values for this particular field, "
+	"too many to usefully list inline or organize into a menu."
+	"To find a particular value, "
+	"enter some text in the provided field and type return.  A list of matching "
+	"values will appear in this space with checkboxes.  The boxes can be checked "
+	"to indicate the values you are interested in and the resulting search will be "
+	"limited to items having the corresponding value in the corresponding field")))
+
+(define (browse-flat reqdata var dimension (highlights (qc)))
+  (let* ((text-name (slotvar var 'text))
+	 (language (get-language reqdata))
+	 (parsers (dimension-parsers dimension))
+	 (selected (req-get reqdata var))
+	 (added (try (string->dval (get reqdata text-name) dimension language)
+		     (dimension-roots dimension)))
+	 (sortfn (try (dimension-sortfn dimension) #f)))
+    (prefetch selected)
+    (prefetch added)
+    (when (pair? parsers)
+      (TR* (class "textfield" COLSPAN 3)
+	   "Separate entries with a semicolon (;)" (br)
+	   (textfield text-name 40 (try (get reqdata text-name) ""))))
+    (cond ((and (pair? parsers) (empty? (choice added selected)))
+	   (empty-field-doc dimension))
+	  ((or (pair? parsers)
+	       (> (choice-size (choice added selected)) 10))
+	   (doseq (value (sorted selected sortfn))
+	     (display-row reqdata value dimension var #f
+			  (qc highlights) (qc selected) (qc)))
+	   (doseq (value (sorted added sortfn))
+	     (unless (contains? value selected)
+	       (display-row reqdata value dimension var #f
+			    (qc highlights) (qc selected) (qc)))))
+	  (else
+	   (TR* (COLSPAN 3)
+		(doseq (value (sorted selected sortfn))
+		  (span (class "nobreak")
+		    (display-checkbox reqdata var value #t)
+		    (display-item reqdata value dimension (qc highlights))))
+		(doseq (value (sorted added sortfn))
+		  (unless (contains? value selected)
+		    (span (class "nobreak")
+		      (display-checkbox reqdata var value #f)
+		      (display-item reqdata value dimension (qc highlights)))
+		    (html "\n"))))))))
+
+(define (browse-hierarchy reqdata var dimension (highlights (qc)))
+  (let* ((text-name (slotvar var 'text))
+	 (parsers (dimension-parsers dimension))
+	 (expname (slotvar var 'expanded))
+	 (selected (req-get reqdata var))
+	 (expanded (req-get reqdata expname))
+	 (added (string->dval (get reqdata text-name)
+			      dimension (get-language reqdata)))
+	 (sortfn (try (dimension-sortfn dimension) #f)))
+    (prefetch selected)
+    (prefetch added)
+    (prefetch expanded)
+    (when (pair? parsers)
+      (TR* (class "textfield" COLSPAN 3)
+	   "Separate entries with a semicolon (;)" (br)
+	   (textfield text-name 40 (try (get reqdata text-name) ""))))
+    (when (and (pair? parsers) (empty? (choice added selected)))
+     (empty-field-doc dimension))
+    (doseq (value (sorted selected sortfn))
+      (display-row reqdata value dimension var expname
+		   (qc highlights) (qc selected) (qc expanded))
+      (when (contains? value expanded)
+	(display-expansion reqdata value var dimension
+			   (qc selected) (qc highlights))))
+    (doseq (value (sorted added sortfn))
+      (when (and (not (contains? value selected))
+		 (exists? (dval-down value dimension)))
+	(unless (contains? value selected)
+	  (display-row reqdata value dimension var expname
+		       (qc highlights) (qc selected) (qc expanded)))
+	(when (contains? value expanded)
+	  (display-expansion reqdata value var dimension
+			     (qc selected) (qc highlights)))))
+    (doseq (value (sorted added sortfn))
+      (when (and (not (contains? value selected))
+		 (fail? (dval-down value dimension)))
+	(unless (contains? value selected)
+	  (display-row reqdata value dimension var expname
+		       (qc highlights) (qc selected) (qc expanded)))
+	(when (contains? value expanded)
+	  (display-expansion reqdata value var dimension
+			     (qc selected) (qc highlights)))))))
+
+(define (display-row reqdata value dimension selvar expvar 
+		     (highlights (qc)) (selections (qc)) (expansions (qc)))
+  (TR (TH* (CLASS "cbox")
+	   (display-checkbox
+	    reqdata selvar value (contains? value selections)))
+      (TD* (CLASS "concept")
+	   (display-item reqdata value dimension (qc highlights)))
+      (TH* (CLASS "rbuttons")
+	   (when (and expvar
+		      (exists? (get value (dimension-downlink dimension))))
+	     (live-checkbox
+	      reqdata expvar value (contains? value expansions))
+	     (html "expand")))))
+
+(define (display-item reqdata value dimension highlights)
+  (cond ((not (oid? value))
+	 (if (contains? value highlights) highlightedp
+	     (strong (dval-name value dimension (get-language reqdata)))
+	     (em (dval-name value dimension (get-language reqdata)))))
+	(else
+	 (do ((base value (just-oids (dval-up base dimension))))
+	     ((fail? base))
+	   (unless (eq? base value) 
+	     (html (try (get reqdata 'dimsep) " » ")))
+	   (do-choices (b base i)
+	     (if (> i 0) (html " . "))
+	     (display-base-form
+	      b (dval-name b dimension (get-language reqdata))
+	      (contains? b highlights)))))))
+
+(define (display-base-form base string highlightedp)
+  (if (oid? base)
+      (anchor base (if highlightedp (strong string) (html string)))
+      (if highlightedp (strong string) (html string))))
+
+(define (display-expansion reqdata value var dimension selected highlighted)
+  (let ((down (dval-down value dimension)))
+    (when (exists? down)
+      (TR (TH* (CLASS "spacing") "&nbsp;")
+	  (TD* (CLASS "expansion" COLSPAN 2)
+	       (do-choices (d down)
+		 (span (class "nobreak")
+		   (display-checkbox reqdata var d #f)
+		   (if (contains? d selected) "* " " ")
+		   (anchor d (dval-name d dimension (get-language reqdata)))
+		   (html "\n"))
+		 (html "  ")))))))
+
+(define (embedded-browser reqdata var dimension)
+  (table* (class "embedded_browser")
+    (browse-field reqdata var dimension)))
+

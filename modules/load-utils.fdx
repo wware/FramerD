@@ -1,0 +1,33 @@
+(in-module 'load-utils 'osprims)
+
+(define timestamps (make-hashtable))
+
+(define (needs-loading? filename)
+  (let* ((stamp (get timestamps filename))
+	 (age (file-modification-time filename)))
+    (cond ((or (fail? stamp) (> (abs (difftime stamp age)) 0.5))
+	   (hashtable-set! timestamps filename age)
+	   #t)
+	  (else #f))))
+
+(define load-if-changed
+  `(macro (expr)
+     `(when (needs-loading? ,(cadr expr))
+	(notify "Loading " ,(cadr expr)) (load ,(cadr expr)))))
+
+(define (strip-suffix string)
+  (do ((pos (position #\. string)
+	    (position #\. string (1+ pos)))
+       (last-pos #f pos))
+      ((not pos) (subseq string 0 last-pos))))
+
+(define (newpath dir path (suffix #f))
+  (if suffix
+      (let ((sans-suffix (strip-suffix path)))
+	(if (has-suffix "/" dir)
+	    (string-append dir sans-suffix suffix)
+	    (string-append dir "/" sans-suffix suffix)))
+      (if (has-suffix "/" dir) (string-append dir path)
+	  (string-append dir "/" path))))
+
+(module-export! '{needs-loading? load-if-changed newpath})

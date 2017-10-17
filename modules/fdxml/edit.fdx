@@ -1,0 +1,399 @@
+(in-module 'fdxml/edit 'fdxml)
+
+(use-module cgimodule)
+(use-module 'htmlgen)
+(use-module 'xmlgen)
+(use-module 'fdtext)
+(use-module 'fdwww)
+(use-module 'fdinternals)
+(use-module 'index-plus)
+
+;;; Utility functions
+
+;;; A field identifies a modifiable data element used in the script
+;;; and passed between invocations.  It may be accompanied by the
+;;; following detail variables:
+;;;    field_FRAME the frame the field 
+;;;    field_SLOTID the slotid which the field describes
+;;;    field_TYPE the type of the field
+
+;;; When an edit element has an explicit ID argument, it is used as a
+;;; field name and the above elements generated as needed.  When it
+;;; doesn't have an explicit ID argument but specifies a
+;;; frame/framevar and a slotid, an id is consed out of the
+;;; combination and the variables above are consed.
+
+;;; The frame arg can be either an explicit frame or the name of a
+;;; variable which contains the frame.
+
+(define (field-type field)
+  (try (get (cgi-data) (symout field "_TYPE")) "exprs"))
+(define (field-typevar field) (symout field "_TYPE"))
+(define (field-slotid field)
+  (read-var (get (cgi-data) (symout field "_SLOTID"))))
+(define (field-slotidvar field) (symout field "_SLOTID"))
+(define (field-frame field)
+  (let ((frame-arg (read-var (get (cgi-data) (symout field "_FRAME")))))
+    (if (symbol? frame-arg)
+	(try (read-var (get (cgi-data) frame-arg))
+	     frame-arg)
+      frame-arg)))
+(define (field-framevar field) (symout field "_FRAME"))
+
+(define (make-field-id frame (slotid #f))
+  (if slotid
+      (symout (make-field-id frame) ":" (make-field-id slotid))
+    (if (symbol? frame) frame
+       (if (oid? frame)
+	   (symout
+	    "O" (number->string (oid-addr-high frame) 16)
+	    "/" (number->string (oid-addr-low frame) 16))
+	 (symout "X" (hash-dtype frame))))))
+
+(define (convert-field field (type #f))
+  (let ((v (get (cgi-data) field))
+	(type (or type (field-type field))))
+    (if (not (pair? v)) (set! v (list v)))
+    (if (and (pair? v) (find "" v)) (set! v (remove "" v)))
+    (cond ((equal? type "string") (elts v))
+	  ((equal? type "strings") (elts v))
+	  ((equal? type "expr") (read-var (elts v)))
+	  (else (read-var (elts v))))))
+
+
+;;; Creating frames
+
+(define-if-needed cons-pool #f)
+
+(when (and (not cons-pool) (bound? conspool))
+  (set! cons-pool (use-pool+ conspool)))
+
+(define (set-cons-pool! conspool)
+  (set! cons-pool (use-pool+ conspool)))
+
+(define (find-existing fields)
+  (let ((features '()))
+    (if (string? fields) (set! fields (list fields)))
+    (dolist (field fields)
+      (let ((field (read-from-string field)))
+	(set! features
+	      (cons (cons (field-slotid field)
+			  (convert-field field))
+		    features))))
+    (let ((result (index-get %background (car features))))
+      (set! features (cdr features))
+      (until (or (null? features) (empty? result))
+	(set! result
+	      (intersection result (index-get %background (car features)))))
+      result)))
+
+(define (getframe id pool (action action) create)
+  (let ((id (if (string? id) (read-from-string id) id)))
+    (try (qget id)
+	 (find-existing (get (cgi-data) 'fields))
+	 (if (test (cgi-data) action create)
+	     (let ((f (frame-create (try pool cons-pool)))
+		   (fields (get (cgi-data) 'fields)))
+	       (if (string? fields) (set! fields (list fields)))
+	       (%set! (cgi-data) id f)
+	       (cgipass id f)
+	       (dolist (field fields)
+		 (let ((frame (field-frame field))
+		       (type (field-type field)))
+		   (when (or (fail? frame) (eq? frame f) (eq? frame id))
+		     (add! f (field-slotid field)
+			   (convert-field (intern field))))))
+	       f)
+	   (fail)))))
+
+(module-export! '{cons-pool set-cons-pool! getframe})
+
+;;; Value synchronization
+
+(define (sync! frame slot values)
+  ;; (html "[New=" values "]")
+  (let* ((current (get frame slot))
+	 (adds (difference values current))
+	 (drops (difference current values)))
+    ;; (html "[Current=" values "]")
+    ;; (html "[Adding " adds "]")
+    ;; (html "[Dropping " adds "]")
+    (assert! frame slot adds)
+    (retract! frame slot drops)))
+
+(define (isync! index frame slot values)
+  ;; (html "[New=" values "]")
+  (let* ((current (get frame slot))
+	 (adds (difference values current))
+	 (drops (difference current values)))
+    ;; (html "[Current=" values "]")
+    ;; (html "[Adding " adds "]")
+    ;; (html "[Dropping " adds "]")
+    (assert! frame slot adds)
+    (retract! frame slot drops)
+    (index-drop! index (cons slot drops) frame)
+    (index-add! index (cons slot adds) frame)))
+
+(define (field-changed? field)
+  (and (contains? field (frame-slots (cgi-data)))
+       (let ((frame (field-frame field))
+	     (slotid (field-slotid field))
+	     (vals (convert-field field)))
+	 (if (frame? frame)
+	     (not (identical? (get frame slotid) vals))
+	   (exists? (get (cgi-data) field))))))
+(module-export! 'field-changed?)
+
+;;; Simple editors (strings, exprs)
+
+(define (multi-string-editor id (cols 17) (rows #f) onclick)
+  (let* ((id (if (string? id) (intern id) id))
+	 (strings (get (cgi-data) id)))
+    (cond ((> (choice-size strings) 1)
+	   (set! strings (vector->list (sorted strings))))
+	  ((or (empty? strings)  (null? strings))
+	   (set! strings '()))
+	  ((string? strings)
+	   (set! strings (list strings)))
+	  ((and (pair? strings) (find "" strings))
+	   (set! strings (remove "" strings)))
+	  ((pair? strings))
+	  (else (set! strings '())))
+    (span (class "stringedit")
+      (dolist (s strings)
+	(html "&nbsp;&nbsp;"
+	      (if onclick
+		  (xmltag 'input 'name id 'type 'checkbox 'value s
+			  'checked 'yes 'onclick onclick)
+		(xmltag 'input 'name id 'type 'checkbox 'value s 'checked 'yes))
+	      "&nbsp;" (span (class "nobreak") s)))
+      (xmltag 'input 'type 'submit 'name 'action 'value "Add")
+      (if rows
+	  (xmlenv (textarea name id cols cols rows rows))
+	(xmltag 'input 'name id 'type 'text 'size cols)))
+    (elts strings)))
+(define (single-string-editor id default (cols 40) rows onclick)
+  (let* ((id (if (string? id) (intern id) id))
+	 (string (try (get (cgi-data) id) default)))
+    (if (pair? string) (set! string (car string)))
+    (span (class "stringedit")
+      (if (and rows (number? rows) (> rows 1))
+	  (xmlenv (textarea 'name id 'cols cols 'rows rows) string)
+	(xmltag 'input 'name id 'type 'text 'value string 'size
+		cols))
+      (xmltag 'input 'type 'submit 'name 'action 'value "Change"))
+    string))
+
+(define (expr-editor id cols rows onclick)
+  (let* ((id (if (string? id) (intern id) id))
+	 (strings (get (cgi-data) id)))
+    (cond ((empty? strings) (set! strings '()))
+	  ((string? strings) (set! strings (list strings)))
+	  ((and (pair? strings) (find "" strings))
+	   (set! strings (remove "" strings)))
+	  ((pair? strings))
+	  (else (set! strings '())))
+    (span (class "expredit")
+      (if rows
+	  (xmlenv (textarea 'name id 'cols cols 'rows rows))
+	(xmltag 'input 'name id 'type 'text 'size cols))
+      (xmltag 'input 'type 'submit 'name 'action 'value "Add")
+      (dolist (s strings)
+	(html "&nbsp;&nbsp;"
+	      (if onclick
+		  (xmltag 'input 'name id 'type 'checkbox 'value s
+			  'checked 'yes 'onclick onclick)
+		(xmltag 'input 'name id 'type 'checkbox 'value s 'checked 'yes))
+	      "&nbsp;" (span (class "nobreak") s))))
+    (let ((results '{}))
+      (dolist (s strings) (set+! results (read-var s)))
+      results)))
+(define (single-expr-editor id default (cols 32) (rows #f) onclick)
+  (let* ((field (if (string? id) (intern id) id))
+	 (string (get (cgi-data) field))
+	 (val #f))
+    (if (pair? string) (set! string (car string)))
+    (if (exists? string) (set! val (read-var string))
+      (set! val default))
+    (span (class "stringedit")
+      (if rows
+	  (xmlenv (textarea 'name id 'cols cols 'rows rows)
+		  (when (exists? val) (with-output-to-string (pprint val))))
+	(xmltag 'input 'name id 'type 'text 'size cols
+		'value (if (exists? val) (write-to-string val) "")))
+      (xmltag 'input 'type 'submit 'name 'action 'value "Change"))
+    val))
+
+;;; Top level elements
+
+(define (checkedit frame %env . body)
+  (unless (writable? frame)
+    (if (exists? (xml-content body))
+	(dolist (elt (xml-content body))
+	  (unparse-xml elt %env))
+      (div (class "cant_edit")
+	"This frame is read-only.  All edits will be lost."))))
+(module-export! 'checkedit)
+
+
+(define edit-handlers
+  (alist->hashtable
+   `(("string" . ,single-string-editor)
+     ("strings" . ,multi-string-editor)
+     ("expr" . ,single-expr-editor)
+     ("exprs" . ,expr-editor))))
+(module-export! 'edit-handlers)
+
+;; This is a simple element which doesn't have any associated frames
+;; or slotids
+(define (edit id type (default #f) (cols 40) (rows #f) (onclick #f)
+	      %env . body)
+  (let* ((type (try type (field-type id)))
+	 (handler (get edit-handlers type)))
+    (if (exists? handler)
+	(xmlcall handler body %env)
+      (expr-editor id cols rows onclick))))
+
+(define (slot-setup id frame slotid type)
+  (let ((field {}))
+    (if (string? frame) (set! frame (read-from-string frame)))
+    (if (string? slotid) (set! slotid (read-from-string slotid)))
+    (if (string? id) (set! id (intern id)))
+    (if (exists? id) (set! field id)
+      (when (and (exists? frame) (exists? slotid))
+	(set! field (make-field-id frame slotid))))
+    (when (exists? field)
+      (if (exists? frame)
+	  (%set! (cgi-data) (symout field "_FRAME") frame)
+	(let* ((var (field-framevar field))
+	       (val (get (cgi-data) var)))
+	  (when (exists? val)
+	    (set! frame (read-var val))
+	    (cgipass var val))))
+      (if (exists? slotid)
+	  (%set! (cgi-data) (symout field "_SLOTID") slotid)
+	(let* ((var (field-slotidvar field))
+	       (val (read-var (get (cgi-data) var))))
+	  ;; (xmlout "slvar=" var "; slval=" val)
+	  (when (exists? val)
+	    (set! slotid val)
+	    (cgipass var slotid)
+	    )))
+      (if (exists? type)
+	  (%set! (cgi-data) (symout field "_TYPE") type)
+	(let* ((var (field-typevar field))
+	       (val (get (cgi-data) var)))
+	  (when (exists? val)
+	    (set! type val)
+	    (cgipass var val)))))
+    (when (symbol? frame)
+      (if (exists? (get (cgi-data) frame))
+	  (set! frame (qget frame))))
+    (values (qc field) (qc frame) (qc slotid) (qc type))))
+
+(define (slotedit frame slotid id type (cols 40) (rows #f) (submit #f)
+		  (onclick #f) (default #f) (action action) (language #f)
+		  (explanation #f)
+		  %env . body)
+  (multiple-value-bind (field frame slotid type)
+      (slot-setup (qc id) (qc frame) (qc slotid) (qc type))
+    ;; If the value has changed, slotedit puts out an advisory message
+    ;; for read-only frames and potentially saves the changes
+    (when (and (frame? frame) (field-changed? field))
+      ;; This advisory message can be removed with a stylesheet edit
+      (unless (writable? frame)
+	(div (class "cant_edit")
+	  (strong "Warning: ")
+	  "This frame is read-only.  These changes will have no effect!")))
+    ;; The submit-vars parameter specifies which actions will cause
+    ;; a commit/synchronize to happen
+    (when (and (test (cgi-data) action submit) (field-changed? field))
+      (unless (frame? frame)
+	(let ((consed (frame-create cons-pool)))
+	  (%set! (cgi-data) frame consed)
+	  (set! frame consed)))
+      (when (writable? frame)
+	(sync! frame slotid (qc (convert-field field)))
+	(%set! (cgi-data) field (get frame slotid))))
+    ;; If there isn't a value specified, we get a default.  Note that
+    ;; we don't have to worry about the specified value being the
+    ;; empty choice (clearing the slot) because it came from CGI so it
+    ;; will be an empty list or string if it was specified at all.
+    (when (and (frame? frame) (fail? (get (cgi-data) field)))
+      (%set! (cgi-data) field (get frame slotid)))
+    (when explanation
+      (if (string? explanation)
+	  (div (class "slot_explanation") explanation)
+	(div (class "slot_explanation") (xmleval explanation %env))))
+    ;; Now we generate the value editor itself, using edit.
+    (if (exists? id)
+	(xmlcall edit body %env)
+      (begin (xmlcall edit (list (xml-tag body)
+				 (cons (list 'id (symbol->string field))
+				       (try (xml-attributes body) '()))
+				 (try (xml-content body) '()))
+		      %env)
+	     (xmlout)))))
+(module-export! 'slotedit)
+
+(define (slotrow frame slotid id type label (cols 40) (rows #f) (submit #f)
+		 (onclick #f) (default #f) (action action) (language #f)
+		 (explanation #f)
+		 %env . body)
+  (multiple-value-bind (field frame slotid type)
+      (slot-setup (qc id) (qc frame) (qc slotid) (qc type))
+    ;; (xmlout "field=" field "; slotid=" slotid "; frame=" frame)
+    ;; The submit-vars parameter specifies which actions will cause
+    ;; a commit/synchronize to happen
+    (when (and (test (cgi-data) action submit) (field-changed? field))
+      (unless (frame? frame)
+	(let ((consed (frame-create cons-pool)))
+	  (%set! (cgi-data) frame consed)
+	  (set! frame consed)))
+      (when (writable? frame)
+	(sync! frame slotid (qc (convert-field field)))
+	(%set! (cgi-data) field (get frame slotid))))
+    ;; If there isn't a value specified, we get a default.  Note that
+    ;; we don't have to worry about the specified value being the
+    ;; empty choice (clearing the slot) because it came from CGI so it
+    ;; will be an empty list or string if it was specified at all.
+    (when (and (frame? frame) (fail? (get (cgi-data) field)))
+      (%set! (cgi-data) field (get frame slotid)))
+    (when explanation
+      (if (string? explanation)
+	  (div (class "slot_explanation") explanation)
+	(div (class "slot_explanation") (xmleval explanation %env))))
+    ;; Now we generate the value editor itself, using edit.
+    (tr (th* (class "slotid")
+	  (if (exists? label) (xmleval label %env)
+	    (xmlout slotid)))
+	(td* (class "value")
+	  ;; If the value has changed, slotedit puts out an advisory message
+	  ;; for read-only frames and potentially saves the changes
+	  (when (and (frame? frame) (field-changed? field))
+	    ;; This advisory message can be removed with a stylesheet edit
+	    (unless (writable? frame)
+	      (div (class "cant_edit")
+		(strong "Warning: ")
+		"This frame is read-only.  These changes will have no effect!")))
+	  (if (exists? id) (xmlcall edit body %env)
+	    (xmlcall edit (list (xml-tag body)
+				(cons (list 'id (symbol->string field))
+				      (try (xml-attributes body) '()))
+				(try (xml-content body) '()))
+		     %env))))
+    (if (and (exists? id) (frame? frame)) (get frame slotid) (xmlout))))
+(module-export! 'slotrow)
+
+(define (textinput id (default #{}) (rows #f) (cols 40))
+  (let* ((id (if (string? id) (intern id) id))
+	 (v (try (get (cgi-data) id) default)))
+    (if rows
+	(xmlenv (textarea 'name id 'cols cols 'rows rows)
+		(try v ""))
+      (xmltag 'input 'name id 'type 'text 'size cols 'value (try v "")))
+    v))
+
+(module-export! '{edit slotedit textinput
+		  passvar oid->cgivar
+		  sync! isync! convert-script-arg})

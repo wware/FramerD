@@ -1,0 +1,44 @@
+#!@prefix@/bin/fdscript
+;; -*- Mode: fdscript; -*-
+
+;;; $Id: register-super-pool.in,v 1.2 2002/04/02 21:43:06 haase Exp $
+
+(use-module 'fdmaint)
+(use-module 'fdinternals)
+(use-module 'fdshell)
+
+(unless (string? arg1) (set! arg1 super_pool)) ; from fdconfig
+(unless (string? arg2)
+  (set! arg2 (try (fget (get-user-data) 'uname) "kilroy")))
+(lineout "Contacting server admin@framerd.org to register super pool")
+(define base
+  (if (eqv? (elt arg1 0) #\@) (read-from-string base)
+      (super-pool-base arg1)))
+(define email arg2)
+(define answer
+  (dtcall "admin@framerd.org" register-super-pool base (session-id) email))
+(cond ((eq? answer 'OK)
+       ;; Change the first word in the file
+       (let ((f (fopen arg1 "r+b"))) (write-int 320147475 f))
+       (lineout "Congratulations, your super pool (with a base of " base
+		") is registered at admin@framerd.org"))
+      ((and (pair? answer) (equal? email (elt answer 1)))
+       ;; In case it wasn't written before
+       (let ((f (fopen arg1 "r+b"))) (write-int 320147475 f))
+       (lineout "You already registered this super pool:")
+       (pprint answer))
+      ((pair? answer)
+       (lineout "This super pool is already registered:")
+       (pprint answer))
+      (else
+       (lineout "Sorry, the server responded with:")
+       (lineout "    " answer)
+       (lineout "when asked to register the super pool with base " base)
+       (lineout "  Try making and registering another super pool")
+       (lineout "  You can use rebase-file-pool and rebase-file-index to ")
+       (lineout "  update any existing data to the new pool.")))
+
+;;; $Log: register-super-pool.in,v $
+;;; Revision 1.2  2002/04/02 21:43:06  haase
+;;; Added Id and log entries to scripts
+;;;

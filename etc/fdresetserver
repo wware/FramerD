@@ -1,0 +1,10 @@
+#!/bin/bash
+cd $(dirname $1)
+name=$(basename $1 .fdz)
+pid=$(cat ${name}.pid)
+if (kill -TERM $pid) then
+   echo "Couldn't kill PID " $pid
+else
+   rm -f ${name}.pid
+   echo "Killed PID " $pid
+fi

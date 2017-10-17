@@ -1,0 +1,159 @@
+;;; -*- Mode: fdscript; Fill-column: 90; -*-
+
+;;; This provides access to BRICO from CGI scripts
+;;; Copyright (C) beingmeta, inc. 2001-2002
+;;;   $Id: brico.fdx,v 1.3 2003/08/27 10:53:28 haase Exp $
+
+(in-module 'cgi/brico '{brico fdinternals cgi htmlgen xmlgen})
+
+;;; What we export 
+(module-export! '{get-language get-languages set-morphfn!})
+(module-export! '{words->concepts display-slot-hierarchy display-slot-value})
+
+;;;; Getting language information
+
+(define default-languages (?? 'langid '{en es nl pt fi fr de it}))
+(define default-language (?? 'langid 'en))
+(define persistent-language {})
+(define morphfn #f)
+
+(define (set-morphfn! f) (set! morphfn f))
+
+(define (lookup-langid langid)
+  (try (?? 'langid langid)
+       (?? 'langid (string-downcase langid))
+       (?? 'langid (subseq langid 0 2))
+       (?? 'langid (string-downcase (subseq langid 0 2)))))
+
+(define (get-default-languages cdata)
+  (try (req-get cdata 'fd_languages)
+       (if (exists? (get cdata 'accepted-languages))
+	   (if (< (length (get cdata 'accepted-languages)) 3)
+	       ;; If the have one or zero languages accepted,
+	       ;; add in the defaults for show
+	       (choice
+		(lookup-langid (car (elts (get cdata 'accepted-languages))))
+		default-languages)
+	       (try
+		(lookup-langid (car (elts (get cdata 'accepted-languages))))
+		default-languages))
+	   default-languages)
+       default-languages))
+
+(define (get-languages (data #f))
+  (let ((cdata (or data (cgi-data))))
+    (try (req-get cdata 'languages)
+	 (choice (get-language cdata)
+		 (get-default-languages cdata)))))
+
+(define (get-default-language cdata)
+  (try (req-get cdata 'fd_language)
+       (if (exists? (get cdata 'accepted-languages))
+	   (do ((langs (get cdata 'accepted-languages) (cdr langs)))
+	       ((or (null? langs) (exists? (lookup-langid (car (car langs)))))
+		(if (null? langs) default-language
+		    (lookup-langid (car (car langs))))))
+	   default-language)))
+
+(define (get-language (data #f) (var #f))
+  (let ((cdata (or data (cgi-data))))
+    (choice
+     (let ((val (get cdata (or var 'language))))
+       (cond ((fail? val) (get-default-language cdata))
+	     ((and (string? val) (eqv? (elt val 0) #\@)) (parse-arg val))
+	     ((oid? val) val)
+	     ((string? val)
+	      (try (?? 'language (string-reader val))
+		   (?? 'langid (choice val (string-downcase val)))
+		   (get-default-language cdata)))))
+     persistent-language)))
+
+;;; Expanding keyword specs
+
+(define (get-concepts-from-cues string (cdata #f))
+  (words->concepts string (get-language cdata)))
+
+(define (concept-ok? c) (exists? (get c 'sense-category)))
+
+(define (words->concepts keywords language)
+  (filter-choices (concept (expand-keywords keywords language))
+    (concept-ok? concept)))
+
+(define (expand-keyword keyword language)
+  (if (find #\: keyword)
+      (let* ((split (position #\: keyword))
+	     (left (expand-keyword (subseq keyword 0 split) language))
+	     (right (expand-keyword (subseq keyword (1+ split)) language)))
+	(filter-choices (cand left)
+	  (value-path? cand (choice 'hypernym genls) right)))
+      (let ((expansions (choice keyword (stdstring keyword)
+				(if (and morphfn (exists? language))
+				    (let ((roots (morphfn keyword language)))
+				      (choice roots (stdstring roots)))
+				    (fail)))))
+	(try (find-frames %background (choice language 'names) expansions)
+	     (find-frames %background 'words expansions)))))
+
+(define (expand-keywords keywords language)
+  (expand-keyword (string-trim (elts (segment keywords "|"))) language))
+
+;;; Browsing BRICO
+
+(define beingmeta-text
+  "being<font color=red>m<font color=lightgreen>e<font color=blue>t</font></font></font>a")
+
+(define (get-display-name frame)
+  (if (and (exists? (get frame 'obj-name))
+	   (string? (get frame 'obj-name)))
+      (get frame 'obj-name)
+      (let* ((lang (get-language))
+	     (strings (try (get frame lang)
+			   (get frame 'names)
+			   (get frame 'words))))
+	(if (exists? strings) (largest (largest strings length))
+	    (try (get frame 'obj-name) frame)))))
+
+(define (display-hierarchy name frames slotid seen)
+  (do-choices (f frames)
+    (hashset-add! seen f)
+    (span (class "slotval")
+	  (anchor f (get-display-name f))
+	  "&nbsp;&nbsp;&nbsp; "))
+  (let* ((new-oids (hashset-filter seen (just-oids (get frames slotid))))
+	 (v (begin (prefetch new-oids)
+		   (filter-choices (oid new-oids)
+		     (exists? (get oid 'words))))))
+    (unless (empty? v)
+      (html " " name " ")
+      (display-hierarchy name (qc v) slotid seen))))
+
+(define (display-slot-hierarchy name frame slotid)
+  (let* ((values (get frame slotid))
+	 (oid-values (just-oids values)))
+    (when (exists? values)
+      (TR (TH* (valign 'top align 'right) name)
+	  (TD* (valign 'top align 'left)
+	       (display-hierarchy name (qc oid-values) slotid (make-hashset))
+	       (do-choices (v (difference values oid-values))
+		 (span (class "slotval") v "&nbsp;&nbsp;&nbsp; ")))))))
+
+(define (display-slot-value name frame slotid)
+  (when (exists? (get frame slotid))
+    (let ((values (get frame slotid)))
+      (TR (TH* (valign 'top align 'right) name)
+	  (TD* (valign 'top align 'left)
+	       (cond ((> (choice-size values) 100)
+		      (font (color "Red") "This slot has "
+			    (choice-size values)
+			    " values.  Here are 20 of them:") (br)
+			    (set! values (pick-n (qc values) 20)))
+		     (else (html)))
+	       ;; Prefetch wrapped in begin so we don't get an {} in the output
+	       (begin (prefetch (just-oids values)) (html))
+	       (do-choices (f values)
+		 (span (class "slotval")
+		       (if (frame? f)
+			   (anchor f (get-display-name f))
+			   (html f))
+		       "&nbsp;&nbsp;&nbsp; ")))))))
+

@@ -1,0 +1,40 @@
+#!@prefix@/bin/fdscript
+;; -*- Mode: fdscript; -*-
+
+;;; $Id: pool-diff.in,v 1.2 2002/06/03 21:49:35 haase Exp $
+
+(use-module 'fdtext)
+(use-module 'fdinternals)
+
+(define version-pattern
+  #((label major (chunk (isdigit+))) ":" (label minor (chunk (isdigit+)))))
+
+(define (get-faux-metadata arg)
+  (if (tx-match version-pattern arg)
+      (textlet version-pattern arg
+        (frame-create #f
+	  'major-version (read-from-string major)
+	  'minor-version (read-from-string minor)))
+    (file-pool-metadata arg)))
+
+(define (main pool versus)
+  (let ((md1 (file-pool-metadata pool))
+	(md2 (get-faux-metadata versus)))
+    (cond ((not (= (get md1 'major-version) (get md2 'major-version)))
+	   (lineout "Major Version mismatch ")
+	   (exit))
+	  (else (let ((in (fopen pool "rb"))
+		      (entry #f))
+		  (set-file-position! in (get md2 'minor-version))
+		  (set! entry (read-dtype in))
+		  (until (eof-object? entry)
+		    (pprint entry)
+		    (set! entry (read-dtype in))))))))
+
+;;; $Log: pool-diff.in,v $
+;;; Revision 1.2  2002/06/03 21:49:35  haase
+;;; Fixed bug in pool-diff
+;;;
+;;; Revision 1.1  2002/04/25 15:04:42  haase
+;;; Added pool-diff script
+;;;

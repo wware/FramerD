@@ -1,0 +1,18 @@
+#!@prefix@/bin/fdscript
+;; -*- Mode: fdscript; -*-
+
+;;; $Id: index-load.in,v 1.2 2002/04/02 21:43:06 haase Exp $
+
+(define (main arg)
+  (let ((index (use-index arg1)))
+    (cache-index index)
+    (let* ((size (index-size index))
+	   (load (index-count index))
+	   (percent (/ (* 100.0 load) size)))
+      (lineout "The index " arg1 " is " percent "% full,"
+	       " storing " load " keys in " size " slots"))))
+
+;;; $Log: index-load.in,v $
+;;; Revision 1.2  2002/04/02 21:43:06  haase
+;;; Added Id and log entries to scripts
+;;;

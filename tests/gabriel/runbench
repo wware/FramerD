@@ -1,0 +1,12 @@
+#!/usr/local/bin/fdscript
+;;; -*- Mode: fdscript -*-
+(use-module 'tighten)
+(define (run-benchmark benchmark-name benchmark-thunk)
+  (let ((start (xtimestamp)))
+    (dotimes (i 5) (benchmark-thunk))
+    (let ((time (difftime (xtimestamp) start)))
+      (lineout "Benchmark " benchmark-name
+	       " took " time " seconds"))))
+
+(define (main file)
+  (load file))

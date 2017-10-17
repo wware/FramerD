@@ -1,0 +1,38 @@
+#!@prefix@/bin/fdscript
+;; -*- Mode: fdscript; -*-
+
+;;; $Id: list-file-pool.in,v 1.4 2002/04/10 03:02:10 haase Exp $
+
+(use-module 'fdmaint)
+(use-module 'fdinternals)
+;(use-module 'fdshell)
+
+(define (main filename (operation #f))
+  (unless (string? filename)
+    (lineout "Usage: list-file-pool <file pool> [--list]")
+    (exit))
+  (if (equal? operation "--list")
+      (do-pool (x (use-pool filename))
+	(oid-value x) (lineout x) (swap-out x))
+      (if (not operation)
+	  (let ((metadata (file-pool-metadata arg1)))
+	    (lineout "The file pool " arg1
+		     " begins at @"
+		     (number->string (oid-addr-high (pool-base arg1)) 16) "/"
+		     (number->string (oid-addr-low (pool-base arg1)) 16))
+	    (lineout "It has a capacity of "
+	      (pool-capacity arg1) " OIDs of which "
+	      (pool-load arg1) " have been allocated")
+	    (lineout "It has a version id of "
+	      (get metadata 'major-version) ":"
+	      (get metadata 'minor-version))
+	    (lineout "Metadata for the pool is: " metadata))
+	(lineout "Usage: list-file-pool <file pool> [--list]"))))
+
+;;; $Log: list-file-pool.in,v $
+;;; Revision 1.4  2002/04/10 03:02:10  haase
+;;; Added version information to file pools and indices
+;;;
+;;; Revision 1.3  2002/04/02 21:43:06  haase
+;;; Added Id and log entries to scripts
+;;;

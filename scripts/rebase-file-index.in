@@ -1,0 +1,27 @@
+#!@prefix@/bin/fdscript
+;; -*- Mode: fdscript; -*-
+
+;;; $Id: rebase-file-index.in,v 1.4 2002/06/15 18:38:01 haase Exp $
+
+(use-module 'fdmaint)
+(use-module 'fdshell)
+(define (describe-usage)
+  (lineout
+      "Usage: rebase-file-index <old-index> <new-index> <old-super-pool> <new-super-pool>"))
+(define (main)
+  (if (= nargs 4)
+      (if (eqv? (elt arg1 0) #\-) (describe-usage)
+	  (let ((base1 (if (eqv? (elt arg3 0) #\@) (read-from-string arg3)
+			   (super-pool-base arg3)))
+		(base2 (if (eqv? (elt arg4 0) #\@) (read-from-string arg4)
+			   (super-pool-base arg4))))
+	    (set-super-pool-aliasing! base1 base2)
+	    (repack-file-index arg1 arg2)))))
+
+;;; $Log: rebase-file-index.in,v $
+;;; Revision 1.4  2002/06/15 18:38:01  haase
+;;; Added variables for autodoc generation
+;;;
+;;; Revision 1.2  2002/04/02 21:43:06  haase
+;;; Added Id and log entries to scripts
+;;;

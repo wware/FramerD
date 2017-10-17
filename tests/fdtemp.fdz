@@ -1,0 +1,5 @@
+(define (terminate) (exit-server))
+(use-localhost!)
+(serve-pool "fakedb.pool")
+(serve-index "fakedb.index")
+(module-export! 'terminate)

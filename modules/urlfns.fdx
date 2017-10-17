@@ -1,0 +1,264 @@
+;;; -*- Mode: fdscript; text-encoding: latin-1 -*-
+
+;;; Converting URLs into frames
+;;; Copyright (C) 2001-2002 beingmeta, inc
+;;; $Id: urlfns.fdx,v 1.9 2004/09/07 14:42:37 haase Exp $
+
+(in-module 'urlfns '{fdtext index-plus fdinternals})
+
+;; This file implements procedures for analyzing urls and creating
+;; slotmaps and frames; this handles getting the content of the url
+;; and identifying duplicate documents.
+
+(module-export!
+ '{url->slotmap slotmap->url url->frame probe-url normalize-url make-site})
+
+(define (copy-features f1 f2)
+  (doslots (f s v f1) (assert! f2 s v)))
+
+;;;; Making host objects 
+
+(define (find-dot string pos)
+  (let ((pos (position #\. string pos)))
+    (and pos (1+ pos))))
+
+(define (get-domains hostname)
+  (do ((dot 0 (find-dot hostname dot))
+       (suffixes '() (cons (subseq hostname dot) suffixes)))
+      ((not dot) (elts suffixes))))
+
+(sdefine (make-site pool hostname port)
+  (try (find-frames (get-index pool) 'hostname hostname 'portno port)
+       (let ((f (frame-create pool
+		    'obj-name (stringout port "@" hostname)
+		    'domains (get-domains hostname)
+		    'hostname hostname 'portno port
+		    'type 'site)))
+	 (index-frame (get-index pool) f '{type portno hostname domains})
+	 f)))
+
+;;;; Converting URLs to slotmaps (SURLs)
+
+(define url-pattern
+  #((label scheme (chunk (isalpha+))) "://"
+    (label host (char-not ":/"))
+    {"" #(":" (label port (isdigit+))) (eol)} 
+    (label dir (chunk {#("/" {"" (* #((char-not "#/;?@,&=+$<>\"")
+				      "/"))})
+			(eol)
+			;; #("/" {"" (* #((char-not "#/;?@,&=+$<>\"")
+			;;	       (eol)))})
+			}))
+    ;; This handles names which have periods in them
+    {#((label name {"" (char-not "./")}) "." (label suffix {"" (char-not "./#?")}))
+     #((label name {"" (not {"#" "?" "/"})}) "."
+       (label suffix (chunk #((isalpha+) "." (isalpha) (isalpha)))))
+     #((label name {"" (not {"#" "?" "/"})}) "."
+       (label suffix (chunk #((isalpha) (isalpha) (isalpha+)))))
+     #((label name (chunk (char-not "./#?"))) (eol))
+     ""}
+    {"" #("?" (label query (chunk (char-not "#>< "))))}
+    {"" #("#" (label fragment (chunk (rest))))}
+    ))
+
+(define (url->slotmap url)
+  (let* ((frame (match->frame #f url-pattern url))
+	 (dir (get frame 'dir)) (ndir dir))
+    (when (fail? (get frame 'port)) (assert! frame 'port 80))
+    (when (string? (get frame 'port))
+      (%set! frame 'port (read-from-string (get frame 'port))))    
+    ;; Handle some cases of overzealous URL encoding in some documents
+    (when (search "%7e" ndir)
+      (set! ndir (string-subst ndir "%7e" "~")))
+    (when (search "%7E" ndir)
+      (set! ndir (string-subst ndir "%7E" "~")))
+    (when (search "%20" dir)
+      (set! ndir (string-subst ndir "%20" " ")))
+    (unless (has-suffix "/" ndir) (set! ndir (string-append ndir "/")))
+    (unless (eq? dir ndir) (%set! frame 'dir ndir))
+    (assert! frame 'type 'url)
+    frame))
+(define (slotmap->url surl)
+  (stringout (get surl 'scheme) "://"
+	     (get surl 'host) ":" (get surl 'port)
+	     (get surl 'dir) (try (get surl 'name) "")
+	     (try (string-append "." (get surl 'suffix)) "")
+	     (try (string-append "?" (get surl 'query)) "")
+	     (try (string-append "#" (get surl 'fragment)) "")))
+
+
+;;;; Removing extra info from url slotmaps
+
+(define (fragment-base surl)
+  (let ((f (frame-create #f)))
+    (dolist (slot '(scheme host port dir name suffix query))
+      (assert! f slot (get surl slot)))
+    (assert! f 'type 'url)
+    f))
+
+(define (query-base surl)
+  (let ((f (frame-create #f)))
+    (dolist (slot '(scheme host port dir name suffix))
+      (assert! f slot (get surl slot)))
+    (assert! f 'type 'url)
+    f))
+
+(define (strip-n-dirs path n)
+  (if (= n 0) path
+      (strip-n-dirs (strip-last-dir path) (1- n))))
+
+(define (normalize-relative-url base path)
+  (cond ((has-prefix "./" path)
+	 (normalize-relative-url base (subseq path 2)))
+	((has-prefix "../" path)
+	 (normalize-relative-url (strip-last-dir base) (subseq path 3)))
+	(else (string-append base path))))
+
+;;; Normalizing relative URL references
+;;;  (e.g. interpreting "foo.html" 
+;;;              within "http://www.bar.org/spam/baz/index.html")
+(define (normalize-url string base)
+  (if (exists? (tx-matcher '{"ftp:" "nntp:" "mailto:" "gopher:" "http:"}
+			   string))
+      string
+      (let ((base-frame (if (string? base) (url->slotmap base) base)))
+	(with-slots (scheme host port dir name suffix) base-frame
+	  (cond ((find #\[ string) (fail))
+		((has-prefix "/" string)
+		 (stringout scheme "://" host ":" port string))
+		((has-prefix "../" string)
+		 (stringout scheme "://" host ":" port
+			    (normalize-relative-url (get base 'dir) string)))
+		((tx-match url-pattern string) string)
+		((has-prefix "./" string)
+		 (stringout scheme "://" host ":" port dir
+			    (subseq string 2)))
+		((or (has-prefix "#" string)
+		     (has-prefix "?" string))
+		 (if (exists? suffix)
+		     (stringout scheme "://" host ":" port dir
+				name "." suffix string)
+		   (stringout scheme "://" host ":" port dir
+			      name string)))
+		(else (stringout scheme "://" host ":" port dir
+				 string)))))))
+
+;;; Making SURLs into frames
+;;; This includes making versions without query or fragment information
+
+;; This is synchronized to avoid race conditions in multi-threaded programs
+(sdefine (surl->frame surl pool)
+  (let ((urltext (slotmap->url surl)))
+    (try (find-frames (get-index pool) 'url urltext)
+	 (let* ((full-path
+		 (string-append (get surl 'dir) (surl-full-name surl)))
+		(f (frame-create pool
+		       'obj-name urltext 'url urltext
+		       'path full-path))
+		(index (get-index pool)))
+	   (copy-features surl f)
+	   (assert! f 'site (make-site pool (get f 'host) (get f 'port)))
+	   (index-frame index f 'url (slotmap->url surl))
+	   (index-frame index f '{scheme host port dir name suffix site})
+	   (let ((dir-elts (get-dirs (get f 'dir))))
+	     (index-frame index f 'dirs dir-elts)
+	     (index-frame index f 'dirs
+			  (choice (string-downcase dir-elts)
+				  (stdstring dir-elts))))
+	   f))))
+
+(define (get-dirs string)
+  (do ((pos (position #\/ string 1)
+	    (position #\/ string (1+ pos)))
+       (dirs (choice string (elts (segment string "/")))))
+      ((not pos) (difference dirs (choice "" "/")))
+    (set+! dirs (subseq string 0 (1+ pos)))
+    (set+! dirs (subseq string (1+ pos)))))
+
+(define (surl-full-name surl)
+  (if (exists? (get surl 'suffix))
+      (stringout (get surl 'name) "." (get surl 'suffix))
+    (get surl 'name)))
+
+;; This is synchronized to avoid race conditions in multi-threaded programs
+(sdefine (url->frame url pool)
+  (when (search ".." url) (raise-exception 'bad-url url))
+  (try (find-frames (get-index pool) 'url url)
+       (let* ((surl (url->slotmap url))
+	      (f (surl->frame surl pool))
+	      (index (get-index pool)))
+	 (when (exists? (get surl 'fragment))
+	   (let ((base (surl->frame (fragment-base surl) pool)))
+	     (assert! f 'fragment-of base)
+	     (index-frame index f 'fragment-of base)))
+	 (when (exists? (get f 'query))
+	   (let ((base (surl->frame (query-base surl) pool)))
+	     (assert! f 'query-of base)
+	     (index-frame index f 'query-of base)))
+	 f)))
+
+(define (probe-url url pool)
+  (find-frames (get-index pool) 'url url))
+
+
+;;; Parsing hierarchical pathnames
+;;; This can be used to identify similar pathnames
+
+(define (get-positions location start)
+  (let ((pos (position #\/ location start)))
+    (cond  ((eq? pos (1- (length location))) (fail))
+	   (pos (choice pos (get-positions location (+ pos 1))))
+	   (else (fail)))))
+(define (get-prefixes string)
+  (choice string
+	  (subseq string 0 (get-positions string 1))))
+
+(define (strip-last-dir string)
+  (do ((i (- (length string) (if (has-suffix "/" string) 2 1))
+	  (1- i)))
+      ((or (<= i 0) (eqv? (elt string i) #\/))
+       (subseq string 0 (1+ i)))))
+
+;;; $Log: urlfns.fdx,v $
+;;; Revision 1.9  2004/09/07 14:42:37  haase
+;;; Added more extensive assoc slot methods
+;;;
+;;; Revision 1.8  2004/04/12 13:25:38  haase
+;;; Fix ambiguity in URL parsing
+;;;
+;;; Revision 1.7  2004/03/11 13:01:22  haase
+;;; Made sure that dirs have trailing /s
+;;;
+;;; Revision 1.6  2004/03/09 13:10:10  haase
+;;; Fixes to the urlfns module
+;;;
+;;; Revision 1.5  2004/03/08 11:19:06  haase
+;;; Made urlfns handle case with no directory component
+;;;
+;;; Revision 1.4  2004/02/20 02:19:14  haase
+;;; Fixes to url normalization
+;;;
+;;; Revision 1.3  2003/11/03 02:32:40  haase
+;;; Fix bug in site canonicalization
+;;;
+;;; Revision 1.2  2003/08/27 10:53:28  haase
+;;; Merged 2.4 patches into trunk, started 2.5
+;;;
+;;; Revision 1.1.2.2  2002/09/20 22:06:23  haase
+;;; Make urlfns use fdinternals
+;;;
+;;; Revision 1.1.2.1  2002/08/12 18:38:51  haase
+;;; Added urlfns module
+;;;
+;;; Revision 1.10  2002/05/01 02:26:32  haase
+;;; Translate %20 in url names into spaces
+;;;
+;;; Revision 1.9  2002/04/22 05:27:09  haase
+;;; Fix URLs which have overzealous URL encoding in source documents
+;;;
+;;; Revision 1.8  2002/04/11 03:53:18  haase
+;;; Added indexing for directory elements
+;;;
+;;; Revision 1.7  2002/04/04 17:09:29  haase
+;;; Added headers and RCS keywords
+;;;

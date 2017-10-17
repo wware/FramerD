@@ -1,0 +1,10 @@
+Insure++.compile.ReportFile insra
+Insure++.runtime.ReportFile insra
+Insure++.Suppress RETURN_INCONSISTENT(4) at *
+Insure++.summarize coverage
+Insure++.threaded_runtime on
+Insure++.stdlib_replace off
+insra.visual emacs +%l %f
+Insure++.interface_library etc/mmap_i.tqs
+
+
